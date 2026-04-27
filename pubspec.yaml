@@ -1,0 +1,69 @@
+name: tuxie
+description: Tuxie — Household Life OS
+version: 1.0.0+1
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Supabase — database, auth, storage, realtime
+  supabase_flutter: ^2.3.0
+
+  # Navigation
+  go_router: ^13.0.0
+
+  # State management
+  riverpod: ^2.4.9
+  flutter_riverpod: ^2.4.9
+
+  # Secure local storage (for tokens)
+  flutter_secure_storage: ^9.0.0
+
+  # UI
+  google_fonts: ^6.1.0
+  cached_network_image: ^3.3.0
+
+  # Date/time helpers
+  intl: ^0.19.0
+
+  # HTTP client (for Claude API + Weather)
+  http: ^1.2.0
+
+  # File picking (Second Brain captures)
+  file_picker: ^8.0.0
+  image_picker: ^1.0.7
+
+  # Audio recording (voice captures)
+  record: ^5.1.0
+  just_audio: ^0.9.36
+
+  # URL launcher (for link captures)
+  url_launcher: ^6.2.5
+
+  # Local notifications
+  flutter_local_notifications: ^17.1.0
+
+  # Firebase (push notifications only)
+  firebase_core: ^2.27.0
+  firebase_messaging: ^14.7.19
+
+  # Shared preferences (lightweight local config)
+  shared_preferences: ^2.2.2
+
+  # UUID generation
+  uuid: ^4.3.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/animations/

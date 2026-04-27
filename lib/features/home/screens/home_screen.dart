@@ -1,0 +1,533 @@
+// lib/features/home/screens/home_screen.dart
+// The main daily focus screen — first real data-connected screen
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+import '../../../core/supabase/supabase_config.dart';
+import '../../../core/theme/tuxie_theme.dart';
+
+// ── PROVIDERS ────────────────────────────────────────────────────
+
+// Current user's profile
+final profileProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
+  final userId = supabase.auth.currentUser?.id;
+  if (userId == null) return null;
+  return await supabase
+    .from('profiles')
+    .select()
+    .eq('id', userId)
+    .single();
+});
+
+// Household info
+final householdProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
+  final userId = supabase.auth.currentUser?.id;
+  if (userId == null) return null;
+  final member = await supabase
+    .from('household_members')
+    .select('household_id, households(name)')
+    .eq('profile_id', userId)
+    .single();
+  return member['households'] as Map<String, dynamic>?;
+});
+
+// Today's tasks — high priority, due today or overdue
+final todayTasksProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+  final member = await supabase
+    .from('household_members')
+    .select('household_id')
+    .eq('profile_id', supabase.auth.currentUser!.id)
+    .single();
+  final householdId = member['household_id'];
+
+  return await supabase
+    .from('tasks')
+    .select('*, profiles!assigned_to(display_name)')
+    .eq('household_id', householdId)
+    .eq('is_completed', false)
+    .lte('due_date', today)
+    .order('priority', ascending: false)
+    .order('due_date', ascending: true)
+    .limit(5);
+});
+
+// Today's habit completion count
+final habitSummaryProvider = FutureProvider<Map<String, int>>((ref) async {
+  final userId  = supabase.auth.currentUser!.id;
+  final today   = DateFormat('yyyy-MM-dd').format(DateTime.now());
+  final member  = await supabase
+    .from('household_members')
+    .select('household_id')
+    .eq('profile_id', userId)
+    .single();
+  final householdId = member['household_id'];
+
+  final habits = await supabase
+    .from('habits')
+    .select('id')
+    .eq('household_id', householdId)
+    .eq('is_active', true);
+
+  final logs = await supabase
+    .from('habit_logs')
+    .select('id')
+    .eq('profile_id', userId)
+    .eq('logged_date', today)
+    .eq('is_completed', true);
+
+  return { 'total': habits.length, 'done': logs.length };
+});
+
+// ── SCREEN ───────────────────────────────────────────────────────
+
+class HomeScreen extends ConsumerWidget {
+  const HomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profile   = ref.watch(profileProvider);
+    final household = ref.watch(householdProvider);
+    final tasks     = ref.watch(todayTasksProvider);
+    final habits    = ref.watch(habitSummaryProvider);
+
+    final now  = DateTime.now();
+    final hour = now.hour;
+    final greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+    final dateStr = DateFormat('EEEE, MMMM d').format(now);
+
+    return Scaffold(
+      backgroundColor: TuxieColors.linen,
+      body: RefreshIndicator(
+        onRefresh: () async {
+          ref.invalidate(profileProvider);
+          ref.invalidate(householdProvider);
+          ref.invalidate(todayTasksProvider);
+          ref.invalidate(habitSummaryProvider);
+        },
+        color: TuxieColors.lavenderDark,
+        child: CustomScrollView(
+          slivers: [
+            // ── DARK HEADER ─────────────────────────────────────
+            SliverToBoxAdapter(
+              child: Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [TuxieColors.tuxedo, TuxieColors.tuxedoSoft],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
+                ),
+                child: SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 20, 24, 28),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Date + notification row
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(dateStr,
+                              style: TuxieTextStyles.body(13,
+                                weight: FontWeight.w600,
+                                color: Colors.white.withOpacity(0.55))),
+                            const Icon(Icons.notifications_outlined,
+                              color: Colors.white54, size: 22),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+
+                        // Greeting + mascot row
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: profile.when(
+                                data: (p) => Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('$greeting,',
+                                      style: TuxieTextStyles.body(16,
+                                        color: Colors.white.withOpacity(0.7))),
+                                    Text(p?['display_name'] ?? 'Welcome',
+                                      style: TuxieTextStyles.display(30,
+                                        color: TuxieColors.sand)),
+                                  ],
+                                ),
+                                loading: () => const SizedBox(height: 60),
+                                error: (_, __) => Text('Welcome back',
+                                  style: TuxieTextStyles.display(30,
+                                    color: Colors.white)),
+                              ),
+                            ),
+                            // Tuxie mascot
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.10),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: const Text('🐱',
+                                style: TextStyle(fontSize: 36)),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        // Daily brief card
+                        Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.10),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: Colors.white.withOpacity(0.12)),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('✦ ',
+                                style: TextStyle(color: Colors.white70,
+                                  fontSize: 14)),
+                              Expanded(
+                                child: tasks.when(
+                                  data: (taskList) {
+                                    final count = taskList.length;
+                                    final briefText = count > 0
+                                      ? 'You have $count item${count == 1 ? "" : "s"} needing attention today. Pull down to refresh.'
+                                      : 'You\'re all caught up for today! Enjoy the day. 🎉';
+                                    return Text(briefText,
+                                      style: TuxieTextStyles.body(13,
+                                        color: Colors.white.withOpacity(0.8)));
+                                  },
+                                  loading: () => Text('Checking your day...',
+                                    style: TuxieTextStyles.body(13,
+                                      color: Colors.white.withOpacity(0.6))),
+                                  error: (_, __) => Text('Tap to refresh.',
+                                    style: TuxieTextStyles.body(13,
+                                      color: Colors.white.withOpacity(0.6))),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+            // ── BODY CONTENT ─────────────────────────────────────
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 24, 16, 100),
+              sliver: SliverList(
+                delegate: SliverChildListDelegate([
+
+                  // ── TODAY'S FOCUS ──
+                  _SectionHeader(title: "Today's Focus", action: "See all"),
+                  const SizedBox(height: 10),
+
+                  tasks.when(
+                    data: (taskList) {
+                      if (taskList.isEmpty) {
+                        return _EmptyState(
+                          emoji: '✅',
+                          message: 'Nothing due today — you\'re on top of it!',
+                          color: TuxieColors.sage,
+                        );
+                      }
+                      return Column(
+                        children: taskList.map((task) =>
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: _TaskCard(task: task),
+                          )
+                        ).toList(),
+                      );
+                    },
+                    loading: () => const _LoadingCard(),
+                    error: (e, _) => _ErrorCard(message: e.toString()),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // ── QUICK STATS ──
+                  _SectionHeader(title: "At a glance"),
+                  const SizedBox(height: 10),
+
+                  Row(
+                    children: [
+                      // Tasks stat
+                      Expanded(
+                        child: tasks.when(
+                          data: (t) => _StatCard(
+                            value: '${t.length}',
+                            label: 'Tasks due',
+                            sub: t.isEmpty ? 'all clear!' : 'today',
+                            color: t.isEmpty ? TuxieColors.sage : TuxieColors.blush,
+                            tc: t.isEmpty ? TuxieColors.sageDark : TuxieColors.blushDark,
+                          ),
+                          loading: () => const _StatCard(value: '...', label: 'Tasks', sub: '', color: TuxieColors.blush, tc: TuxieColors.blushDark),
+                          error: (_, __) => const _StatCard(value: '?', label: 'Tasks', sub: '', color: TuxieColors.blush, tc: TuxieColors.blushDark),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+
+                      // Habits stat
+                      Expanded(
+                        child: habits.when(
+                          data: (h) => _StatCard(
+                            value: '${h["done"]}/${h["total"]}',
+                            label: 'Habits',
+                            sub: 'done today',
+                            color: TuxieColors.sage,
+                            tc: TuxieColors.sageDark,
+                          ),
+                          loading: () => const _StatCard(value: '...', label: 'Habits', sub: '', color: TuxieColors.sage, tc: TuxieColors.sageDark),
+                          error: (_, __) => const _StatCard(value: '?', label: 'Habits', sub: '', color: TuxieColors.sage, tc: TuxieColors.sageDark),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+
+                      // Household stat
+                      Expanded(
+                        child: household.when(
+                          data: (h) => _StatCard(
+                            value: '🏠',
+                            label: 'Household',
+                            sub: h?['name']?.toString().split(' ').first ?? 'Home',
+                            color: TuxieColors.lavender,
+                            tc: TuxieColors.lavenderDark,
+                          ),
+                          loading: () => const _StatCard(value: '🏠', label: 'Home', sub: '...', color: TuxieColors.lavender, tc: TuxieColors.lavenderDark),
+                          error: (_, __) => const _StatCard(value: '🏠', label: 'Home', sub: '', color: TuxieColors.lavender, tc: TuxieColors.lavenderDark),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                ]),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── WIDGETS ───────────────────────────────────────────────────────
+
+class _SectionHeader extends StatelessWidget {
+  final String title;
+  final String? action;
+  const _SectionHeader({required this.title, this.action});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(title, style: TuxieTextStyles.display(18)),
+        if (action != null)
+          Text(action!,
+            style: TuxieTextStyles.body(12,
+              weight: FontWeight.w700,
+              color: TuxieColors.lavenderDark)),
+      ],
+    );
+  }
+}
+
+class _TaskCard extends StatelessWidget {
+  final Map<String, dynamic> task;
+  const _TaskCard({required this.task});
+
+  @override
+  Widget build(BuildContext context) {
+    final domain   = task['domain'] as String? ?? 'household';
+    final priority = task['priority'] as String? ?? 'medium';
+    final dueDate  = task['due_date'] != null
+      ? DateFormat('MMM d').format(DateTime.parse(task['due_date']))
+      : null;
+
+    final priorityColors = {
+      'high':   TuxieColors.priorityHigh,
+      'medium': TuxieColors.priorityMedium,
+      'low':    TuxieColors.priorityLow,
+    };
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: TuxieColors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: TuxieColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8, offset: const Offset(0, 2)),
+        ],
+      ),
+      child: Row(
+        children: [
+          // Domain icon
+          Container(
+            width: 44, height: 44,
+            decoration: BoxDecoration(
+              color: TuxieColors.domainColor(domain),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Center(child: Text(TuxieColors.domainEmoji(domain),
+              style: const TextStyle(fontSize: 20))),
+          ),
+          const SizedBox(width: 12),
+
+          // Content
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(task['title'] ?? '',
+                  style: TuxieTextStyles.body(14, weight: FontWeight.w600)),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    // Priority dot
+                    Container(
+                      width: 8, height: 8,
+                      decoration: BoxDecoration(
+                        color: priorityColors[priority],
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    if (dueDate != null) Text(dueDate,
+                      style: TuxieTextStyles.body(12,
+                        color: TuxieColors.textSecondary)),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: TuxieColors.domainColor(domain),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(domain.replaceAll('_', ' '),
+                        style: TuxieTextStyles.body(11,
+                          weight: FontWeight.w700,
+                          color: TuxieColors.domainColorDark(domain))),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          const Icon(Icons.chevron_right_rounded,
+            color: TuxieColors.textMuted, size: 20),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatCard extends StatelessWidget {
+  final String value;
+  final String label;
+  final String sub;
+  final Color color;
+  final Color tc;
+  const _StatCard({required this.value, required this.label,
+    required this.sub, required this.color, required this.tc});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: TuxieColors.border),
+      ),
+      child: Column(
+        children: [
+          Text(value,
+            style: TuxieTextStyles.body(22,
+              weight: FontWeight.w800, color: tc)),
+          const SizedBox(height: 2),
+          Text(label,
+            style: TuxieTextStyles.body(11,
+              weight: FontWeight.w700)),
+          Text(sub,
+            style: TuxieTextStyles.body(10,
+              color: TuxieColors.textSecondary)),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  final String emoji;
+  final String message;
+  final Color color;
+  const _EmptyState({required this.emoji, required this.message, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 28)),
+          const SizedBox(width: 14),
+          Expanded(child: Text(message,
+            style: TuxieTextStyles.body(14,
+              weight: FontWeight.w600))),
+        ],
+      ),
+    );
+  }
+}
+
+class _LoadingCard extends StatelessWidget {
+  const _LoadingCard();
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 80,
+      decoration: BoxDecoration(
+        color: TuxieColors.white,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: const Center(child: CircularProgressIndicator()),
+    );
+  }
+}
+
+class _ErrorCard extends StatelessWidget {
+  final String message;
+  const _ErrorCard({required this.message});
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: TuxieColors.blush,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text('Could not load tasks. Pull down to retry.',
+        style: TuxieTextStyles.body(13, color: TuxieColors.blushDark)),
+    );
+  }
+}
