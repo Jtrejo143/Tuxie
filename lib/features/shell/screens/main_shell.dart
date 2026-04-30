@@ -29,10 +29,10 @@ class MainShell extends StatelessWidget {
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: TuxieColors.white,
-          border: Border(top: BorderSide(color: TuxieColors.border)),
+          border: const Border(top: BorderSide(color: TuxieColors.border)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.06),
+              color: Colors.black.withValues(alpha: 0.06),
               blurRadius: 20,
               offset: const Offset(0, -4),
             ),
@@ -120,7 +120,7 @@ class _CaptureButton extends StatelessWidget {
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: TuxieColors.tuxedo.withOpacity(0.3),
+                      color: TuxieColors.tuxedo.withValues(alpha: 0.3),
                       blurRadius: 16,
                       offset: const Offset(0, 4),
                     ),

@@ -1,21 +1,21 @@
 // lib/features/auth/screens/onboarding_screen.dart
-// After signup: create a new household OR join an existing one via invite code
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/supabase/supabase_config.dart';
 import '../../../core/theme/tuxie_theme.dart';
 import '../../../core/router/app_router.dart';
 import '../widgets/auth_text_field.dart';
 
-class OnboardingScreen extends StatefulWidget {
+class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
   @override
-  State<OnboardingScreen> createState() => _OnboardingScreenState();
+  ConsumerState<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
-class _OnboardingScreenState extends State<OnboardingScreen> {
-  bool _creating = true; // true = create, false = join
+class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
+  bool _creating = true;
   final _householdNameCtrl = TextEditingController();
   final _inviteCodeCtrl    = TextEditingController();
   bool _loading = false;
@@ -27,39 +27,84 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       return;
     }
     setState(() { _loading = true; _error = null; });
+
     try {
-      final userId = supabase.auth.currentUser!.id;
+      final user = supabase.auth.currentUser;
+      if (user == null) {
+        setState(() { _error = 'ERROR: No authenticated user found. Please sign in again.'; });
+        return;
+      }
 
-      // 1. Create the household
-      final household = await supabase
-        .from('households')
-        .insert({
-          'name': _householdNameCtrl.text.trim(),
-          'created_by': userId,
-        })
-        .select()
-        .single();
+      debugPrint('🐱 User ID: ${user.id}');
+      debugPrint('🐱 User email: ${user.email}');
+      debugPrint('🐱 User metadata: ${user.userMetadata}');
+      debugPrint('🐱 Session token present: ${supabase.auth.currentSession?.accessToken != null}');
 
-      // 2. Add current user as owner
-      await supabase.from('household_members').insert({
-        'household_id': household['id'],
-        'profile_id': userId,
-        'role': 'owner',
-      });
+      // Step 1 — Upsert profile
+      debugPrint('🐱 Step 1: Upserting profile...');
+      try {
+        await supabase.from('profiles').upsert({
+          'id': user.id,
+          'display_name': user.userMetadata?['display_name'] ?? 'New User',
+        }, onConflict: 'id');
+        debugPrint('🐱 Step 1 SUCCESS: Profile upserted');
+      } catch (e) {
+        debugPrint('🐱 Step 1 FAILED: $e');
+        setState(() { _error = 'Step 1 (profile) failed: $e'; });
+        return;
+      }
 
+      // Step 2 — Create household
+      debugPrint('🐱 Step 2: Creating household...');
+      Map<String, dynamic> household;
+      try {
+        household = await supabase
+            .from('households')
+            .insert({
+              'name': _householdNameCtrl.text.trim(),
+              'created_by': user.id,
+            })
+            .select()
+            .single();
+        debugPrint('🐱 Step 2 SUCCESS: Household created: ${household['id']}');
+      } catch (e) {
+        debugPrint('🐱 Step 2 FAILED: $e');
+        setState(() { _error = 'Step 2 (household) failed: $e'; });
+        return;
+      }
+
+      // Step 3 — Add household member
+      debugPrint('🐱 Step 3: Adding household member...');
+      try {
+        await supabase.from('household_members').insert({
+          'household_id': household['id'],
+          'profile_id': user.id,
+          'role': 'owner',
+        });
+        debugPrint('🐱 Step 3 SUCCESS: Member added');
+      } catch (e) {
+        debugPrint('🐱 Step 3 FAILED: $e');
+        setState(() { _error = 'Step 3 (member) failed: $e'; });
+        return;
+      }
+
+      // Step 4 — Navigate home
+      debugPrint('🐱 Step 4: Resolving auth and navigating home...');
+      await ref.read(authNotifierProvider).resolve();
       if (mounted) context.go(Routes.home);
+      debugPrint('🐱 Step 4 SUCCESS: Navigation complete');
+
     } catch (e) {
-      setState(() { _error = 'Could not create household. Please try again.'; });
+      debugPrint('🐱 Unexpected error: $e');
+      setState(() { _error = 'Unexpected error: $e'; });
     } finally {
       if (mounted) setState(() { _loading = false; });
     }
   }
 
-  // NOTE: Join via invite code will be implemented in a later session
-  // For now this shows the UI — the invite system is Milestone 1 polish
   Future<void> _joinHousehold() async {
     setState(() {
-      _error = 'Invite system coming soon! Ask your partner to share the household ID from Settings.';
+      _error = 'Invite system coming in a later session. Ask your partner to share the household ID from Settings.';
       _loading = false;
     });
   }
@@ -76,46 +121,38 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             children: [
               const SizedBox(height: 20),
 
-              // Header
-              Center(child: Text('🐱', style: const TextStyle(fontSize: 56))),
+              const Center(child: Text('🐱', style: TextStyle(fontSize: 56))),
               const SizedBox(height: 16),
               Center(child: Text('Welcome to Tuxie',
                 style: TuxieTextStyles.display(28))),
               const SizedBox(height: 8),
               Center(child: Text('Set up your household to get started.',
-                style: TuxieTextStyles.body(15,
-                  color: TuxieColors.textSecondary),
-                textAlign: TextAlign.center,
-              )),
+                style: TuxieTextStyles.body(15, color: TuxieColors.textSecondary),
+                textAlign: TextAlign.center)),
 
               const SizedBox(height: 36),
 
-              // Toggle: Create vs Join
+              // Toggle
               Container(
                 decoration: BoxDecoration(
                   color: TuxieColors.white,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: TuxieColors.border),
                 ),
-                child: Row(
-                  children: [
-                    Expanded(child: _TabButton(
-                      label: 'Create household',
-                      active: _creating,
-                      onTap: () => setState(() { _creating = true; _error = null; }),
-                    )),
-                    Expanded(child: _TabButton(
-                      label: 'Join household',
-                      active: !_creating,
-                      onTap: () => setState(() { _creating = false; _error = null; }),
-                    )),
-                  ],
-                ),
+                child: Row(children: [
+                  Expanded(child: _TabButton(
+                    label: 'Create household', active: _creating,
+                    onTap: () => setState(() { _creating = true; _error = null; }),
+                  )),
+                  Expanded(child: _TabButton(
+                    label: 'Join household', active: !_creating,
+                    onTap: () => setState(() { _creating = false; _error = null; }),
+                  )),
+                ]),
               ),
 
               const SizedBox(height: 24),
 
-              // Form
               if (_creating) ...[
                 Text('Household name',
                   style: TuxieTextStyles.body(13,
@@ -125,12 +162,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 AuthTextField(
                   controller: _householdNameCtrl,
                   hint: 'e.g. The Johnson Household',
-                  darkMode: false,
-                ),
+                  darkMode: false),
                 const SizedBox(height: 8),
                 Text('You can always rename this in Settings.',
-                  style: TuxieTextStyles.body(12,
-                    color: TuxieColors.textMuted)),
+                  style: TuxieTextStyles.body(12, color: TuxieColors.textMuted)),
               ] else ...[
                 Text('Invite code',
                   style: TuxieTextStyles.body(13,
@@ -140,8 +175,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 AuthTextField(
                   controller: _inviteCodeCtrl,
                   hint: 'Paste invite code from your partner',
-                  darkMode: false,
-                ),
+                  darkMode: false),
               ],
 
               if (_error != null) ...[
@@ -150,11 +184,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
                     color: TuxieColors.blush,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                    borderRadius: BorderRadius.circular(12)),
                   child: Text(_error!,
-                    style: TuxieTextStyles.body(13,
-                      color: TuxieColors.blushDark)),
+                    style: TuxieTextStyles.body(13, color: TuxieColors.blushDark)),
                 ),
               ],
 
@@ -163,14 +195,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: _loading
-                    ? null
+                  onPressed: _loading ? null
                     : (_creating ? _createHousehold : _joinHousehold),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16)),
-                  ),
+                      borderRadius: BorderRadius.circular(16))),
                   child: _loading
                     ? const SizedBox(height: 20, width: 20,
                         child: CircularProgressIndicator(

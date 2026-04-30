@@ -31,24 +31,24 @@ class AuthTextField extends StatelessWidget {
         hintText: hint,
         hintStyle: TuxieTextStyles.body(15,
           color: darkMode
-            ? Colors.white.withOpacity(0.35)
+            ? Colors.white.withValues(alpha: 0.35)
             : TuxieColors.textMuted),
         filled: true,
         fillColor: darkMode
-          ? Colors.white.withOpacity(0.10)
+          ? Colors.white.withValues(alpha: 0.10)
           : TuxieColors.white,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide(
             color: darkMode
-              ? Colors.white.withOpacity(0.15)
+              ? Colors.white.withValues(alpha: 0.15)
               : TuxieColors.border),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide(
             color: darkMode
-              ? Colors.white.withOpacity(0.15)
+              ? Colors.white.withValues(alpha: 0.15)
               : TuxieColors.border),
         ),
         focusedBorder: OutlineInputBorder(

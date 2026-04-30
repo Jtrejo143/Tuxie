@@ -103,11 +103,10 @@ ThemeData tuxieTheme() {
   return ThemeData(
     useMaterial3: true,
     scaffoldBackgroundColor: TuxieColors.linen,
-    colorScheme: ColorScheme.light(
+    colorScheme: const ColorScheme.light(
       primary: TuxieColors.tuxedo,
       secondary: TuxieColors.lavenderDark,
       surface: TuxieColors.white,
-      background: TuxieColors.linen,
     ),
     textTheme: GoogleFonts.nunitoTextTheme().copyWith(
       displayLarge: GoogleFonts.dmSerifDisplay(fontSize: 40),
@@ -116,12 +115,12 @@ ThemeData tuxieTheme() {
       headlineMedium: GoogleFonts.dmSerifDisplay(fontSize: 22),
       headlineSmall: GoogleFonts.dmSerifDisplay(fontSize: 18),
     ),
-    cardTheme: CardTheme(
+    cardTheme: CardThemeData(
       color: TuxieColors.white,
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: TuxieColors.border, width: 1),
+        side: const BorderSide(color: TuxieColors.border, width: 1),
       ),
     ),
     appBarTheme: AppBarTheme(
@@ -156,11 +155,11 @@ ThemeData tuxieTheme() {
       fillColor: TuxieColors.white,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: TuxieColors.border),
+        borderSide: const BorderSide(color: TuxieColors.border),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: TuxieColors.border),
+        borderSide: const BorderSide(color: TuxieColors.border),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),

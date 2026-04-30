@@ -6,14 +6,15 @@ import '../../../core/supabase/supabase_config.dart';
 import '../../../core/theme/tuxie_theme.dart';
 import '../../../core/router/app_router.dart';
 import '../widgets/auth_text_field.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class LoginScreen extends StatefulWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _emailCtrl    = TextEditingController();
   final _passwordCtrl = TextEditingController();
   bool _loading = false;
@@ -26,6 +27,7 @@ class _LoginScreenState extends State<LoginScreen> {
         email: _emailCtrl.text.trim(),
         password: _passwordCtrl.text,
       );
+      await ref.read(authNotifierProvider).resolve();
       if (mounted) context.go(Routes.home);
     } catch (e) {
       setState(() { _error = 'Invalid email or password. Please try again.'; });
@@ -56,7 +58,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 4),
                   Text('Your household butler',
                     style: TuxieTextStyles.body(15,
-                      color: Colors.white.withOpacity(0.55))),
+                      color: Colors.white.withValues(alpha: 0.55))),
                 ]),
               ),
 
@@ -80,7 +82,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: TuxieColors.blush.withOpacity(0.15),
+                    color: TuxieColors.blush.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(_error!,
@@ -117,7 +119,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   onPressed: () => context.go(Routes.signup),
                   child: Text('New household? Create an account',
                     style: TuxieTextStyles.body(14,
-                      color: Colors.white.withOpacity(0.6))),
+                      color: Colors.white.withValues(alpha: 0.6))),
                 ),
               ),
 

@@ -33,29 +33,29 @@ dependencies:
   # HTTP client (for Claude API + Weather)
   http: ^1.2.0
 
-  # File picking (Second Brain captures)
+  # File picking — Milestone 4 (Second Brain)
   file_picker: ^8.0.0
   image_picker: ^1.0.7
 
-  # Audio recording (voice captures)
-  record: ^5.1.0
-  just_audio: ^0.9.36
-
   # URL launcher (for link captures)
   url_launcher: ^6.2.5
-
-  # Local notifications
-  flutter_local_notifications: ^17.1.0
-
-  # Firebase (push notifications only)
-  firebase_core: ^2.27.0
-  firebase_messaging: ^14.7.19
 
   # Shared preferences (lightweight local config)
   shared_preferences: ^2.2.2
 
   # UUID generation
   uuid: ^4.3.3
+
+  # ── ADDED IN LATER MILESTONES ──────────────────────────────────
+  # Milestone 4 — Second Brain audio:
+  #   record: 5.0.5          ← DO NOT ADD EARLY: causes record_linux Windows conflict
+  #   just_audio: ^0.9.36
+  #
+  # Milestone 5 — Push notifications (requires FlutterFire CLI setup first):
+  #   firebase_core: ^2.27.0       ← DO NOT ADD EARLY: requires google-services config
+  #   firebase_messaging: ^14.7.19  ← DO NOT ADD EARLY: CMake install will fail
+  #   flutter_local_notifications: ^17.1.0
+  # ──────────────────────────────────────────────────────────────
 
 dev_dependencies:
   flutter_test:

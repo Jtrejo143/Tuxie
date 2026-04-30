@@ -9,7 +9,6 @@ import '../../../core/theme/tuxie_theme.dart';
 
 // ── PROVIDERS ────────────────────────────────────────────────────
 
-// Current user's profile
 final profileProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
   final userId = supabase.auth.currentUser?.id;
   if (userId == null) return null;
@@ -20,7 +19,6 @@ final profileProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
     .single();
 });
 
-// Household info
 final householdProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
   final userId = supabase.auth.currentUser?.id;
   if (userId == null) return null;
@@ -32,7 +30,6 @@ final householdProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
   return member['households'] as Map<String, dynamic>?;
 });
 
-// Today's tasks — high priority, due today or overdue
 final todayTasksProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
   final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
   final member = await supabase
@@ -41,7 +38,6 @@ final todayTasksProvider = FutureProvider<List<Map<String, dynamic>>>((ref) asyn
     .eq('profile_id', supabase.auth.currentUser!.id)
     .single();
   final householdId = member['household_id'];
-
   return await supabase
     .from('tasks')
     .select('*, profiles!assigned_to(display_name)')
@@ -53,7 +49,6 @@ final todayTasksProvider = FutureProvider<List<Map<String, dynamic>>>((ref) asyn
     .limit(5);
 });
 
-// Today's habit completion count
 final habitSummaryProvider = FutureProvider<Map<String, int>>((ref) async {
   final userId  = supabase.auth.currentUser!.id;
   final today   = DateFormat('yyyy-MM-dd').format(DateTime.now());
@@ -92,10 +87,10 @@ class HomeScreen extends ConsumerWidget {
     final tasks     = ref.watch(todayTasksProvider);
     final habits    = ref.watch(habitSummaryProvider);
 
-    final now  = DateTime.now();
-    final hour = now.hour;
+    final now      = DateTime.now();
+    final hour     = now.hour;
     final greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
-    final dateStr = DateFormat('EEEE, MMMM d').format(now);
+    final dateStr  = DateFormat('EEEE, MMMM d').format(now);
 
     return Scaffold(
       backgroundColor: TuxieColors.linen,
@@ -109,7 +104,8 @@ class HomeScreen extends ConsumerWidget {
         color: TuxieColors.lavenderDark,
         child: CustomScrollView(
           slivers: [
-            // ── DARK HEADER ─────────────────────────────────────
+
+            // ── DARK HEADER ──────────────────────────────────────
             SliverToBoxAdapter(
               child: Container(
                 decoration: const BoxDecoration(
@@ -118,7 +114,8 @@ class HomeScreen extends ConsumerWidget {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
-                  borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
+                  borderRadius: BorderRadius.vertical(
+                    bottom: Radius.circular(32)),
                 ),
                 child: SafeArea(
                   bottom: false,
@@ -127,18 +124,33 @@ class HomeScreen extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Date + notification row
+
+                        // Date + sign out row
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(dateStr,
                               style: TuxieTextStyles.body(13,
                                 weight: FontWeight.w600,
-                                color: Colors.white.withOpacity(0.55))),
-                            const Icon(Icons.notifications_outlined,
-                              color: Colors.white54, size: 22),
+                                color: Colors.white.withValues(alpha: 0.55))),
+                            // ── TEMP SIGN OUT BUTTON ─────────────
+                            // Remove this after Milestone 1 is verified
+                            IconButton(
+                              icon: const Icon(Icons.logout_rounded,
+                                color: Colors.white54, size: 20),
+                              tooltip: 'Sign out',
+                              onPressed: () async {
+                                // AuthNotifier listens to the Supabase auth stream
+                                // and will automatically update state on sign out.
+                                // Do NOT call ref.read() here — widget may be
+                                // disposed before the async completes.
+                                await supabase.auth.signOut();
+                              },
+                            ),
+                            // ─────────────────────────────────────
                           ],
                         ),
+
                         const SizedBox(height: 10),
 
                         // Greeting + mascot row
@@ -152,7 +164,7 @@ class HomeScreen extends ConsumerWidget {
                                   children: [
                                     Text('$greeting,',
                                       style: TuxieTextStyles.body(16,
-                                        color: Colors.white.withOpacity(0.7))),
+                                        color: Colors.white.withValues(alpha: 0.7))),
                                     Text(p?['display_name'] ?? 'Welcome',
                                       style: TuxieTextStyles.display(30,
                                         color: TuxieColors.sand)),
@@ -164,11 +176,10 @@ class HomeScreen extends ConsumerWidget {
                                     color: Colors.white)),
                               ),
                             ),
-                            // Tuxie mascot
                             Container(
                               padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.10),
+                                color: Colors.white.withValues(alpha: 0.10),
                                 borderRadius: BorderRadius.circular(20),
                               ),
                               child: const Text('🐱',
@@ -183,34 +194,34 @@ class HomeScreen extends ConsumerWidget {
                         Container(
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.10),
+                            color: Colors.white.withValues(alpha: 0.10),
                             borderRadius: BorderRadius.circular(16),
                             border: Border.all(
-                              color: Colors.white.withOpacity(0.12)),
+                              color: Colors.white.withValues(alpha: 0.12)),
                           ),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               const Text('✦ ',
-                                style: TextStyle(color: Colors.white70,
-                                  fontSize: 14)),
+                                style: TextStyle(
+                                  color: Colors.white70, fontSize: 14)),
                               Expanded(
                                 child: tasks.when(
                                   data: (taskList) {
                                     final count = taskList.length;
                                     final briefText = count > 0
-                                      ? 'You have $count item${count == 1 ? "" : "s"} needing attention today. Pull down to refresh.'
+                                      ? 'You have $count item${count == 1 ? "" : "s"} needing attention today.'
                                       : 'You\'re all caught up for today! Enjoy the day. 🎉';
                                     return Text(briefText,
                                       style: TuxieTextStyles.body(13,
-                                        color: Colors.white.withOpacity(0.8)));
+                                        color: Colors.white.withValues(alpha: 0.8)));
                                   },
                                   loading: () => Text('Checking your day...',
                                     style: TuxieTextStyles.body(13,
-                                      color: Colors.white.withOpacity(0.6))),
-                                  error: (_, __) => Text('Tap to refresh.',
+                                      color: Colors.white.withValues(alpha: 0.6))),
+                                  error: (_, __) => Text('Pull down to refresh.',
                                     style: TuxieTextStyles.body(13,
-                                      color: Colors.white.withOpacity(0.6))),
+                                      color: Colors.white.withValues(alpha: 0.6))),
                                 ),
                               ),
                             ],
@@ -223,20 +234,19 @@ class HomeScreen extends ConsumerWidget {
               ),
             ),
 
-            // ── BODY CONTENT ─────────────────────────────────────
+            // ── BODY ─────────────────────────────────────────────
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 24, 16, 100),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
 
-                  // ── TODAY'S FOCUS ──
-                  _SectionHeader(title: "Today's Focus", action: "See all"),
+                  const _SectionHeader(title: "Today's Focus", action: "See all"),
                   const SizedBox(height: 10),
 
                   tasks.when(
                     data: (taskList) {
                       if (taskList.isEmpty) {
-                        return _EmptyState(
+                        return const _EmptyState(
                           emoji: '✅',
                           message: 'Nothing due today — you\'re on top of it!',
                           color: TuxieColors.sage,
@@ -257,13 +267,11 @@ class HomeScreen extends ConsumerWidget {
 
                   const SizedBox(height: 24),
 
-                  // ── QUICK STATS ──
-                  _SectionHeader(title: "At a glance"),
+                  const _SectionHeader(title: "At a glance"),
                   const SizedBox(height: 10),
 
                   Row(
                     children: [
-                      // Tasks stat
                       Expanded(
                         child: tasks.when(
                           data: (t) => _StatCard(
@@ -273,13 +281,13 @@ class HomeScreen extends ConsumerWidget {
                             color: t.isEmpty ? TuxieColors.sage : TuxieColors.blush,
                             tc: t.isEmpty ? TuxieColors.sageDark : TuxieColors.blushDark,
                           ),
-                          loading: () => const _StatCard(value: '...', label: 'Tasks', sub: '', color: TuxieColors.blush, tc: TuxieColors.blushDark),
-                          error: (_, __) => const _StatCard(value: '?', label: 'Tasks', sub: '', color: TuxieColors.blush, tc: TuxieColors.blushDark),
+                          loading: () => const _StatCard(value: '...', label: 'Tasks', sub: '',
+                            color: TuxieColors.blush, tc: TuxieColors.blushDark),
+                          error: (_, __) => const _StatCard(value: '?', label: 'Tasks', sub: '',
+                            color: TuxieColors.blush, tc: TuxieColors.blushDark),
                         ),
                       ),
                       const SizedBox(width: 10),
-
-                      // Habits stat
                       Expanded(
                         child: habits.when(
                           data: (h) => _StatCard(
@@ -289,13 +297,13 @@ class HomeScreen extends ConsumerWidget {
                             color: TuxieColors.sage,
                             tc: TuxieColors.sageDark,
                           ),
-                          loading: () => const _StatCard(value: '...', label: 'Habits', sub: '', color: TuxieColors.sage, tc: TuxieColors.sageDark),
-                          error: (_, __) => const _StatCard(value: '?', label: 'Habits', sub: '', color: TuxieColors.sage, tc: TuxieColors.sageDark),
+                          loading: () => const _StatCard(value: '...', label: 'Habits', sub: '',
+                            color: TuxieColors.sage, tc: TuxieColors.sageDark),
+                          error: (_, __) => const _StatCard(value: '?', label: 'Habits', sub: '',
+                            color: TuxieColors.sage, tc: TuxieColors.sageDark),
                         ),
                       ),
                       const SizedBox(width: 10),
-
-                      // Household stat
                       Expanded(
                         child: household.when(
                           data: (h) => _StatCard(
@@ -305,8 +313,10 @@ class HomeScreen extends ConsumerWidget {
                             color: TuxieColors.lavender,
                             tc: TuxieColors.lavenderDark,
                           ),
-                          loading: () => const _StatCard(value: '🏠', label: 'Home', sub: '...', color: TuxieColors.lavender, tc: TuxieColors.lavenderDark),
-                          error: (_, __) => const _StatCard(value: '🏠', label: 'Home', sub: '', color: TuxieColors.lavender, tc: TuxieColors.lavenderDark),
+                          loading: () => const _StatCard(value: '🏠', label: 'Home', sub: '...',
+                            color: TuxieColors.lavender, tc: TuxieColors.lavenderDark),
+                          error: (_, __) => const _StatCard(value: '🏠', label: 'Home', sub: '',
+                            color: TuxieColors.lavender, tc: TuxieColors.lavenderDark),
                         ),
                       ),
                     ],
@@ -322,7 +332,7 @@ class HomeScreen extends ConsumerWidget {
   }
 }
 
-// ── WIDGETS ───────────────────────────────────────────────────────
+// ── WIDGETS ──────────────────────────────────────────────────────
 
 class _SectionHeader extends StatelessWidget {
   final String title;
@@ -371,25 +381,24 @@ class _TaskCard extends StatelessWidget {
         border: Border.all(color: TuxieColors.border),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8, offset: const Offset(0, 2)),
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2)),
         ],
       ),
       child: Row(
         children: [
-          // Domain icon
           Container(
             width: 44, height: 44,
             decoration: BoxDecoration(
               color: TuxieColors.domainColor(domain),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: Center(child: Text(TuxieColors.domainEmoji(domain),
-              style: const TextStyle(fontSize: 20))),
+            child: Center(
+              child: Text(TuxieColors.domainEmoji(domain),
+                style: const TextStyle(fontSize: 20))),
           ),
           const SizedBox(width: 12),
-
-          // Content
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -399,7 +408,6 @@ class _TaskCard extends StatelessWidget {
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    // Priority dot
                     Container(
                       width: 8, height: 8,
                       decoration: BoxDecoration(
@@ -413,7 +421,8 @@ class _TaskCard extends StatelessWidget {
                         color: TuxieColors.textSecondary)),
                     const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
                         color: TuxieColors.domainColor(domain),
                         borderRadius: BorderRadius.circular(20),
@@ -428,7 +437,6 @@ class _TaskCard extends StatelessWidget {
               ],
             ),
           ),
-
           const Icon(Icons.chevron_right_rounded,
             color: TuxieColors.textMuted, size: 20),
         ],
@@ -443,8 +451,13 @@ class _StatCard extends StatelessWidget {
   final String sub;
   final Color color;
   final Color tc;
-  const _StatCard({required this.value, required this.label,
-    required this.sub, required this.color, required this.tc});
+  const _StatCard({
+    required this.value,
+    required this.label,
+    required this.sub,
+    required this.color,
+    required this.tc,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -462,8 +475,7 @@ class _StatCard extends StatelessWidget {
               weight: FontWeight.w800, color: tc)),
           const SizedBox(height: 2),
           Text(label,
-            style: TuxieTextStyles.body(11,
-              weight: FontWeight.w700)),
+            style: TuxieTextStyles.body(11, weight: FontWeight.w700)),
           Text(sub,
             style: TuxieTextStyles.body(10,
               color: TuxieColors.textSecondary)),
@@ -477,7 +489,11 @@ class _EmptyState extends StatelessWidget {
   final String emoji;
   final String message;
   final Color color;
-  const _EmptyState({required this.emoji, required this.message, required this.color});
+  const _EmptyState({
+    required this.emoji,
+    required this.message,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -492,8 +508,7 @@ class _EmptyState extends StatelessWidget {
           Text(emoji, style: const TextStyle(fontSize: 28)),
           const SizedBox(width: 14),
           Expanded(child: Text(message,
-            style: TuxieTextStyles.body(14,
-              weight: FontWeight.w600))),
+            style: TuxieTextStyles.body(14, weight: FontWeight.w600))),
         ],
       ),
     );

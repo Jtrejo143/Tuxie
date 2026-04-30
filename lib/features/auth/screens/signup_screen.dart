@@ -6,14 +6,15 @@ import '../../../core/supabase/supabase_config.dart';
 import '../../../core/theme/tuxie_theme.dart';
 import '../../../core/router/app_router.dart';
 import '../widgets/auth_text_field.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class SignupScreen extends StatefulWidget {
+class SignupScreen extends ConsumerStatefulWidget {
   const SignupScreen({super.key});
   @override
-  State<SignupScreen> createState() => _SignupScreenState();
+  ConsumerState<SignupScreen> createState() => _SignupScreenState();
 }
 
-class _SignupScreenState extends State<SignupScreen> {
+class _SignupScreenState extends ConsumerState<SignupScreen> {
   final _nameCtrl     = TextEditingController();
   final _emailCtrl    = TextEditingController();
   final _passwordCtrl = TextEditingController();
@@ -32,6 +33,7 @@ class _SignupScreenState extends State<SignupScreen> {
         password: _passwordCtrl.text,
         data: { 'display_name': _nameCtrl.text.trim() },
       );
+      await ref.read(authNotifierProvider).resolve();
       if (mounted) context.go(Routes.onboarding);
     } catch (e) {
       setState(() { _error = e.toString(); });
@@ -55,7 +57,7 @@ class _SignupScreenState extends State<SignupScreen> {
                 style: TuxieTextStyles.display(32, color: Colors.white))),
               Center(child: Text('Let\'s set up your household',
                 style: TuxieTextStyles.body(15,
-                  color: Colors.white.withOpacity(0.55)))),
+                  color: Colors.white.withValues(alpha: 0.55)))),
               const Spacer(),
               AuthTextField(controller: _nameCtrl, hint: 'Your name (e.g. Alex)'),
               const SizedBox(height: 12),
@@ -73,7 +75,7 @@ class _SignupScreenState extends State<SignupScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: TuxieColors.blush.withOpacity(0.15),
+                    color: TuxieColors.blush.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(12)),
                   child: Text(_error!,
                     style: TuxieTextStyles.body(13, color: TuxieColors.blushDark)),
@@ -105,7 +107,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   onPressed: () => context.go(Routes.login),
                   child: Text('Already have an account? Sign in',
                     style: TuxieTextStyles.body(14,
-                      color: Colors.white.withOpacity(0.6))),
+                      color: Colors.white.withValues(alpha: 0.6))),
                 ),
               ),
               const SizedBox(height: 20),
