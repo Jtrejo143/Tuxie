@@ -168,21 +168,8 @@ class HomeScreen extends ConsumerWidget {
                               style: TuxieTextStyles.body(13,
                                 weight: FontWeight.w600,
                                 color: Colors.white.withValues(alpha: 0.55))),
-                            // ── TEMP SIGN OUT BUTTON ─────────────
-                            // Remove this after Milestone 1 is verified
-                            IconButton(
-                              icon: const Icon(Icons.logout_rounded,
-                                color: Colors.white54, size: 20),
-                              tooltip: 'Sign out',
-                              onPressed: () async {
-                                // AuthNotifier listens to the Supabase auth stream
-                                // and will automatically update state on sign out.
-                                // Do NOT call ref.read() here — widget may be
-                                // disposed before the async completes.
-                                await supabase.auth.signOut();
-                              },
-                            ),
-                            // ─────────────────────────────────────
+                            const Icon(Icons.notifications_outlined,
+                              color: Colors.white54, size: 22),
                           ],
                         ),
 

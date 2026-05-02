@@ -375,7 +375,7 @@ class _AddTaskSheetState extends State<AddTaskSheet> {
                 Switch(
                   value: _isPrivate,
                   onChanged: (v) => setState(() => _isPrivate = v),
-                  activeColor: TuxieColors.tuxedo,
+                  activeThumbColor: TuxieColors.tuxedo,
                 ),
               ],
             ),

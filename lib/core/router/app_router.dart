@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../features/auth/screens/login_screen.dart';
@@ -10,6 +11,7 @@ import '../../features/auth/screens/onboarding_screen.dart';
 import '../../features/shell/screens/main_shell.dart';
 import '../../features/home/screens/home_screen.dart';
 import '../../features/tasks/screens/tasks_screen.dart';
+import '../../features/more/screens/more_screen.dart';
 import '../../features/placeholder_screens.dart';
 
 // ── ROUTES ────────────────────────────────────────────────────────
