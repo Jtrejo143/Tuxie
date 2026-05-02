@@ -9,6 +9,7 @@ import '../../features/auth/screens/signup_screen.dart';
 import '../../features/auth/screens/onboarding_screen.dart';
 import '../../features/shell/screens/main_shell.dart';
 import '../../features/home/screens/home_screen.dart';
+import '../../features/tasks/screens/tasks_screen.dart';
 import '../../features/placeholder_screens.dart';
 
 // ── ROUTES ────────────────────────────────────────────────────────
@@ -159,7 +160,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state, child) => MainShell(child: child),
         routes: [
           GoRoute(path: Routes.home,     builder: (c, s) => const HomeScreen()),
-          GoRoute(path: Routes.calendar, builder: (c, s) => const CalendarScreen()),
+          GoRoute(path: Routes.calendar, builder: (c, s) => const TasksScreen()),
           GoRoute(path: Routes.capture,  builder: (c, s) => const CaptureScreen()),
           GoRoute(path: Routes.finance,  builder: (c, s) => const FinanceScreen()),
           GoRoute(

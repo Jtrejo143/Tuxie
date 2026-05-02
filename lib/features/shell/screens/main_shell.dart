@@ -29,7 +29,7 @@ class MainShell extends StatelessWidget {
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: TuxieColors.white,
-          border: const Border(top: BorderSide(color: TuxieColors.border)),
+          border: Border(top: BorderSide(color: TuxieColors.border)),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.06),
@@ -45,7 +45,7 @@ class MainShell extends StatelessWidget {
             child: Row(
               children: [
                 _NavItem(icon: Icons.home_rounded,      label: 'Home',     index: 0, selected: selectedIndex, onTap: () => context.go(Routes.home)),
-                _NavItem(icon: Icons.calendar_month,    label: 'Calendar', index: 1, selected: selectedIndex, onTap: () => context.go(Routes.calendar)),
+                _NavItem(icon: Icons.check_box_outlined,    label: 'Tasks', index: 1, selected: selectedIndex, onTap: () => context.go(Routes.calendar)),
                 _CaptureButton(onTap: () => context.go(Routes.capture)),
                 _NavItem(icon: Icons.account_balance_wallet_rounded, label: 'Finance', index: 3, selected: selectedIndex, onTap: () => context.go(Routes.finance)),
                 _NavItem(icon: Icons.more_horiz_rounded, label: 'More',    index: 4, selected: selectedIndex, onTap: () => context.go(Routes.more)),
