@@ -6,39 +6,66 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../core/supabase/supabase_config.dart';
 import '../../../core/theme/tuxie_theme.dart';
+import '../../../core/router/app_router.dart';
 
 // ── PROVIDERS ────────────────────────────────────────────────────
+// All providers watch authNotifierProvider so they automatically
+// re-fetch when the logged-in user changes (login / logout / switch).
+// This fixes the stale name bug where the previous user's data
+// was shown after signing in as a different account.
 
 final profileProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
+  // Watch auth state — invalidates this provider on every auth change
+  ref.watch(authNotifierProvider);
+
   final userId = supabase.auth.currentUser?.id;
-  if (userId == null) return null;
-  return await supabase
+  debugPrint('🐱 profileProvider: fetching for userId=$userId');
+  if (userId == null) {
+    debugPrint('🐱 profileProvider: no user — returning null');
+    return null;
+  }
+  final result = await supabase
     .from('profiles')
     .select()
     .eq('id', userId)
     .single();
+  debugPrint('🐱 profileProvider: got display_name=${result['display_name']}');
+  return result;
 });
 
 final householdProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
+  ref.watch(authNotifierProvider);
+
   final userId = supabase.auth.currentUser?.id;
+  debugPrint('🐱 householdProvider: fetching for userId=$userId');
   if (userId == null) return null;
+
   final member = await supabase
     .from('household_members')
     .select('household_id, households(name)')
     .eq('profile_id', userId)
     .single();
-  return member['households'] as Map<String, dynamic>?;
+  final household = member['households'] as Map<String, dynamic>?;
+  debugPrint('🐱 householdProvider: got household=${household?['name']}');
+  return household;
 });
 
 final todayTasksProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  ref.watch(authNotifierProvider);
+
+  final userId = supabase.auth.currentUser?.id;
+  debugPrint('🐱 todayTasksProvider: fetching for userId=$userId');
+  if (userId == null) return [];
+
   final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
   final member = await supabase
     .from('household_members')
     .select('household_id')
-    .eq('profile_id', supabase.auth.currentUser!.id)
+    .eq('profile_id', userId)
     .single();
   final householdId = member['household_id'];
-  return await supabase
+
+  final tasks = await supabase
     .from('tasks')
     .select('*, profiles!assigned_to(display_name)')
     .eq('household_id', householdId)
@@ -47,12 +74,19 @@ final todayTasksProvider = FutureProvider<List<Map<String, dynamic>>>((ref) asyn
     .order('priority', ascending: false)
     .order('due_date', ascending: true)
     .limit(5);
+  debugPrint('🐱 todayTasksProvider: found ${tasks.length} tasks');
+  return tasks;
 });
 
 final habitSummaryProvider = FutureProvider<Map<String, int>>((ref) async {
-  final userId  = supabase.auth.currentUser!.id;
-  final today   = DateFormat('yyyy-MM-dd').format(DateTime.now());
-  final member  = await supabase
+  ref.watch(authNotifierProvider);
+
+  final userId = supabase.auth.currentUser?.id;
+  debugPrint('🐱 habitSummaryProvider: fetching for userId=$userId');
+  if (userId == null) return {'total': 0, 'done': 0};
+
+  final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+  final member = await supabase
     .from('household_members')
     .select('household_id')
     .eq('profile_id', userId)
@@ -72,7 +106,8 @@ final habitSummaryProvider = FutureProvider<Map<String, int>>((ref) async {
     .eq('logged_date', today)
     .eq('is_completed', true);
 
-  return { 'total': habits.length, 'done': logs.length };
+  debugPrint('🐱 habitSummaryProvider: ${logs.length}/${habits.length} habits done');
+  return {'total': habits.length, 'done': logs.length};
 });
 
 // ── SCREEN ───────────────────────────────────────────────────────
@@ -240,13 +275,13 @@ class HomeScreen extends ConsumerWidget {
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
 
-                  const _SectionHeader(title: "Today's Focus", action: "See all"),
+                  _SectionHeader(title: "Today's Focus", action: "See all"),
                   const SizedBox(height: 10),
 
                   tasks.when(
                     data: (taskList) {
                       if (taskList.isEmpty) {
-                        return const _EmptyState(
+                        return _EmptyState(
                           emoji: '✅',
                           message: 'Nothing due today — you\'re on top of it!',
                           color: TuxieColors.sage,
@@ -267,7 +302,7 @@ class HomeScreen extends ConsumerWidget {
 
                   const SizedBox(height: 24),
 
-                  const _SectionHeader(title: "At a glance"),
+                  _SectionHeader(title: "At a glance"),
                   const SizedBox(height: 10),
 
                   Row(
