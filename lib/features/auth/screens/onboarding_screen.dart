@@ -103,10 +103,68 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   }
 
   Future<void> _joinHousehold() async {
-    setState(() {
-      _error = 'Invite system coming in a later session. Ask your partner to share the household ID from Settings.';
-      _loading = false;
-    });
+    if (_inviteCodeCtrl.text.trim().isEmpty) {
+      setState(() { _error = 'Please enter a household ID.'; });
+      return;
+    }
+    setState(() { _loading = true; _error = null; });
+
+    debugPrint('🐱 _joinHousehold: Step 1 — verifying household ID');
+    try {
+      final userId = supabase.auth.currentUser!.id;
+
+      // Step 1 — upsert own profile first
+      await supabase.from('profiles').upsert({
+        'id': userId,
+        'display_name': supabase.auth.currentUser!.userMetadata?['display_name'] ?? 'New User',
+      }, onConflict: 'id');
+      debugPrint('🐱 _joinHousehold: Step 1 SUCCESS — profile ready');
+
+      // Step 2 — verify household exists
+      debugPrint('🐱 _joinHousehold: Step 2 — checking household exists');
+      final householdId = _inviteCodeCtrl.text.trim();
+      final household = await supabase
+        .from('households')
+        .select('id, name')
+        .eq('id', householdId)
+        .maybeSingle();
+
+      if (household == null) {
+        setState(() { _error = 'Household not found. Check the ID and try again.'; });
+        return;
+      }
+      debugPrint('🐱 _joinHousehold: Step 2 SUCCESS — found ${household['name']}');
+
+      // Step 3 — check not already a member
+      final existing = await supabase
+        .from('household_members')
+        .select('id')
+        .eq('household_id', householdId)
+        .eq('profile_id', userId)
+        .maybeSingle();
+
+      if (existing != null) {
+        setState(() { _error = 'You are already a member of this household.'; });
+        return;
+      }
+
+      // Step 4 — join as adult_member
+      debugPrint('🐱 _joinHousehold: Step 3 — joining household');
+      await supabase.from('household_members').insert({
+        'household_id': householdId,
+        'profile_id': userId,
+        'role': 'adult_member',
+      });
+      debugPrint('🐱 _joinHousehold: Step 3 SUCCESS');
+
+      await ref.read(authNotifierProvider).resolve();
+      if (mounted) context.go(Routes.home);
+    } catch (e) {
+      debugPrint('🐱 _joinHousehold: FAILED — $e');
+      setState(() { _error = 'Could not join household: $e'; });
+    } finally {
+      if (mounted) setState(() { _loading = false; });
+    }
   }
 
   @override
@@ -121,7 +179,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             children: [
               const SizedBox(height: 20),
 
-              const Center(child: Text('🐱', style: TextStyle(fontSize: 56))),
+              Center(child: const Text('🐱', style: TextStyle(fontSize: 56))),
               const SizedBox(height: 16),
               Center(child: Text('Welcome to Tuxie',
                 style: TuxieTextStyles.display(28))),

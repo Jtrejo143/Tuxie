@@ -94,18 +94,25 @@ class _AddEventSheetState extends State<AddEventSheet> {
       DateTime? endAt;
 
       if (_isAllDay) {
-        startAt = DateTime(_startDate!.year, _startDate!.month,
-          _startDate!.day);
-        if (_endDate != null) {
-          endAt = DateTime(_endDate!.year, _endDate!.month,
-            _endDate!.day, 23, 59);
-        }
+        // All day — use midnight start, no time component
+        // End date defaults to same day if not explicitly set differently
+        startAt = DateTime.utc(_startDate!.year, _startDate!.month,
+          _startDate!.day, 0, 0, 0);
+        final effectiveEnd = _endDate ?? _startDate!;
+        endAt = DateTime.utc(effectiveEnd.year, effectiveEnd.month,
+          effectiveEnd.day, 23, 59, 59);
+        debugPrint('🐱 AddEventSheet: all-day event ${startAt.toIso8601String()} → ${endAt.toIso8601String()}');
       } else {
         startAt = DateTime(_startDate!.year, _startDate!.month,
           _startDate!.day, _startTime.hour, _startTime.minute);
         if (_endDate != null) {
           endAt = DateTime(_endDate!.year, _endDate!.month,
             _endDate!.day, _endTime.hour, _endTime.minute);
+          // Guard: end must be after start
+          if (endAt.isBefore(startAt)) {
+            endAt = startAt.add(const Duration(hours: 1));
+            debugPrint('🐱 AddEventSheet: end before start — adjusted to +1hr');
+          }
         }
       }
 

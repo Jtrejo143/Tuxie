@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../features/auth/screens/login_screen.dart';
@@ -107,11 +108,11 @@ class AuthNotifier extends ChangeNotifier {
 
 final authNotifier = AuthNotifier();
 
-// Regular Provider — AuthNotifier is a global ChangeNotifier.
-// ChangeNotifierProvider was removed in Riverpod 2.x.
-// The router watches this provider and uses AuthNotifier directly
-// as its refreshListenable since it extends ChangeNotifier.
-final authNotifierProvider = Provider<AuthNotifier>((ref) {
+// ChangeNotifierProvider — correctly creates reactive subscriptions.
+// When AuthNotifier calls notifyListeners(), all FutureProviders
+// doing ref.watch(authNotifierProvider) automatically re-run,
+// fixing stale data bugs across all screens on user switch.
+final authNotifierProvider = ChangeNotifierProvider<AuthNotifier>((ref) {
   return authNotifier;
 });
 

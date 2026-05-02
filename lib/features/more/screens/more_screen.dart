@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/supabase/supabase_config.dart';
 import '../../../core/theme/tuxie_theme.dart';
 import '../../../core/router/app_router.dart';
+import '../../tasks/screens/tasks_screen.dart';
 
 // ── PROVIDERS ────────────────────────────────────────────────────
 
@@ -177,6 +178,15 @@ class MoreScreen extends ConsumerWidget {
                 const SizedBox(height: 10),
 
                 _MenuItem(
+                  emoji: '✅',
+                  label: 'Tasks',
+                  sub: 'All household tasks and to-dos',
+                  color: TuxieColors.lavender,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => TasksScreen())),
+                ),
+                _MenuItem(
                   emoji: '🎯',
                   label: 'Goals & Vision',
                   sub: 'Vision board, goals, and projects',
@@ -209,6 +219,13 @@ class MoreScreen extends ConsumerWidget {
                 _SectionLabel('Household'),
                 const SizedBox(height: 10),
 
+                _MenuItem(
+                  emoji: '👤',
+                  label: 'Invite Member',
+                  sub: 'Add someone to your household',
+                  color: TuxieColors.lavender,
+                  onTap: () => _showInviteDialog(context, ref),
+                ),
                 _MenuItem(
                   emoji: '⚙️',
                   label: 'Settings',
@@ -251,6 +268,55 @@ class MoreScreen extends ConsumerWidget {
 }
 
 // ── WIDGETS ──────────────────────────────────────────────────────
+
+Future<void> _showInviteDialog(BuildContext context, WidgetRef ref) async {
+  final member = await supabase
+    .from('household_members')
+    .select('household_id')
+    .eq('profile_id', supabase.auth.currentUser!.id)
+    .single();
+  final householdId = member['household_id'] as String;
+
+  if (!context.mounted) return;
+
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Text('Invite to Household',
+        style: TuxieTextStyles.display(20)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Share this household ID with the person you want to add. They enter it on the Join Household screen during signup.',
+            style: TuxieTextStyles.body(13, color: TuxieColors.textSecondary)),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: TuxieColors.linen,
+              borderRadius: BorderRadius.circular(12)),
+            child: SelectableText(householdId,
+              style: TuxieTextStyles.body(13, weight: FontWeight.w700)),
+          ),
+          const SizedBox(height: 8),
+          Text('Tap and hold to copy the ID above.',
+            style: TuxieTextStyles.body(12, color: TuxieColors.textMuted)),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(),
+          child: Text('Done',
+            style: TuxieTextStyles.body(14,
+              weight: FontWeight.w700,
+              color: TuxieColors.tuxedo)),
+        ),
+      ],
+    ),
+  );
+}
 
 class _SectionLabel extends StatelessWidget {
   final String text;

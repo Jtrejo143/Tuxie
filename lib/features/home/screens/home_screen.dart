@@ -7,6 +7,8 @@ import 'package:intl/intl.dart';
 import '../../../core/supabase/supabase_config.dart';
 import '../../../core/theme/tuxie_theme.dart';
 import '../../../core/router/app_router.dart';
+import '../../tasks/widgets/task_card.dart';
+import '../../tasks/widgets/add_task_sheet.dart';
 
 // ── PROVIDERS ────────────────────────────────────────────────────
 // All providers watch authNotifierProvider so they automatically
@@ -278,7 +280,27 @@ class HomeScreen extends ConsumerWidget {
                         children: taskList.map((task) =>
                           Padding(
                             padding: const EdgeInsets.only(bottom: 10),
-                            child: _TaskCard(task: task),
+                            child: TaskCard(
+                              task: task,
+                              onComplete: () async {
+                                final userId = supabase.auth.currentUser!.id;
+                                await supabase.from('tasks').update({
+                                  'is_completed': true,
+                                  'completed_at': DateTime.now().toIso8601String(),
+                                  'completed_by': userId,
+                                }).eq('id', task['id']);
+                                ref.invalidate(todayTasksProvider);
+                              },
+                              onTap: () => showModalBottomSheet(
+                                context: context,
+                                isScrollControlled: true,
+                                backgroundColor: Colors.transparent,
+                                builder: (_) => AddTaskSheet(
+                                  existingTask: task,
+                                  onSaved: () => ref.invalidate(todayTasksProvider),
+                                ),
+                              ),
+                            ),
                           )
                         ).toList(),
                       );
@@ -373,96 +395,6 @@ class _SectionHeader extends StatelessWidget {
               weight: FontWeight.w700,
               color: TuxieColors.lavenderDark)),
       ],
-    );
-  }
-}
-
-class _TaskCard extends StatelessWidget {
-  final Map<String, dynamic> task;
-  const _TaskCard({required this.task});
-
-  @override
-  Widget build(BuildContext context) {
-    final domain   = task['domain'] as String? ?? 'household';
-    final priority = task['priority'] as String? ?? 'medium';
-    final dueDate  = task['due_date'] != null
-      ? DateFormat('MMM d').format(DateTime.parse(task['due_date']))
-      : null;
-
-    final priorityColors = {
-      'high':   TuxieColors.priorityHigh,
-      'medium': TuxieColors.priorityMedium,
-      'low':    TuxieColors.priorityLow,
-    };
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: TuxieColors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: TuxieColors.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2)),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 44, height: 44,
-            decoration: BoxDecoration(
-              color: TuxieColors.domainColor(domain),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Center(
-              child: Text(TuxieColors.domainEmoji(domain),
-                style: const TextStyle(fontSize: 20))),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(task['title'] ?? '',
-                  style: TuxieTextStyles.body(14, weight: FontWeight.w600)),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Container(
-                      width: 8, height: 8,
-                      decoration: BoxDecoration(
-                        color: priorityColors[priority],
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    if (dueDate != null) Text(dueDate,
-                      style: TuxieTextStyles.body(12,
-                        color: TuxieColors.textSecondary)),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: TuxieColors.domainColor(domain),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(domain.replaceAll('_', ' '),
-                        style: TuxieTextStyles.body(11,
-                          weight: FontWeight.w700,
-                          color: TuxieColors.domainColorDark(domain))),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const Icon(Icons.chevron_right_rounded,
-            color: TuxieColors.textMuted, size: 20),
-        ],
-      ),
     );
   }
 }
