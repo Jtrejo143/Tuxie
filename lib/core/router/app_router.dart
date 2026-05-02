@@ -2,7 +2,6 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../features/auth/screens/login_screen.dart';
@@ -10,8 +9,8 @@ import '../../features/auth/screens/signup_screen.dart';
 import '../../features/auth/screens/onboarding_screen.dart';
 import '../../features/shell/screens/main_shell.dart';
 import '../../features/home/screens/home_screen.dart';
-import '../../features/tasks/screens/tasks_screen.dart';
 import '../../features/more/screens/more_screen.dart';
+import '../../features/calendar/screens/calendar_screen.dart';
 import '../../features/placeholder_screens.dart';
 
 // ── ROUTES ────────────────────────────────────────────────────────
@@ -108,7 +107,11 @@ class AuthNotifier extends ChangeNotifier {
 
 final authNotifier = AuthNotifier();
 
-final authNotifierProvider = ChangeNotifierProvider<AuthNotifier>((ref) {
+// Regular Provider — AuthNotifier is a global ChangeNotifier.
+// ChangeNotifierProvider was removed in Riverpod 2.x.
+// The router watches this provider and uses AuthNotifier directly
+// as its refreshListenable since it extends ChangeNotifier.
+final authNotifierProvider = Provider<AuthNotifier>((ref) {
   return authNotifier;
 });
 
@@ -151,6 +154,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           }
           return null;
       }
+// exhaustive fallback
     },
 
     routes: [
@@ -162,7 +166,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state, child) => MainShell(child: child),
         routes: [
           GoRoute(path: Routes.home,     builder: (c, s) => const HomeScreen()),
-          GoRoute(path: Routes.calendar, builder: (c, s) => const TasksScreen()),
+          GoRoute(path: Routes.calendar, builder: (c, s) => const CalendarScreen()),
           GoRoute(path: Routes.capture,  builder: (c, s) => const CaptureScreen()),
           GoRoute(path: Routes.finance,  builder: (c, s) => const FinanceScreen()),
           GoRoute(

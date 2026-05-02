@@ -7,16 +7,6 @@ import 'package:flutter/material.dart';
 import '../core/theme/tuxie_theme.dart';
 
 // ─────────────────────────────────────────────────────────────────
-// lib/features/calendar/screens/calendar_screen.dart
-// ─────────────────────────────────────────────────────────────────
-class CalendarScreen extends StatelessWidget {
-  const CalendarScreen({super.key});
-  @override
-  Widget build(BuildContext context) =>
-      _Placeholder(title: 'Calendar', emoji: '📅', color: TuxieColors.lavender);
-}
-
-// ─────────────────────────────────────────────────────────────────
 // lib/features/brain/screens/capture_screen.dart
 // ─────────────────────────────────────────────────────────────────
 class CaptureScreen extends StatelessWidget {
