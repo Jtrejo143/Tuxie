@@ -17,16 +17,6 @@ class CaptureScreen extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// lib/features/finance/screens/finance_screen.dart
-// ─────────────────────────────────────────────────────────────────
-class FinanceScreen extends StatelessWidget {
-  const FinanceScreen({super.key});
-  @override
-  Widget build(BuildContext context) =>
-      _Placeholder(title: 'Finances', emoji: '💳', color: TuxieColors.sand);
-}
-
-// ─────────────────────────────────────────────────────────────────
 // lib/features/goals/screens/goals_screen.dart
 // ─────────────────────────────────────────────────────────────────
 class GoalsScreen extends StatelessWidget {
@@ -44,16 +34,6 @@ class HealthScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       _Placeholder(title: 'Health & Habits', emoji: '💪', color: TuxieColors.sage);
-}
-
-// ─────────────────────────────────────────────────────────────────
-// lib/features/inventory/screens/inventory_screen.dart
-// ─────────────────────────────────────────────────────────────────
-class InventoryScreen extends StatelessWidget {
-  const InventoryScreen({super.key});
-  @override
-  Widget build(BuildContext context) =>
-      _Placeholder(title: 'Inventory', emoji: '📦', color: TuxieColors.sand);
 }
 
 // ─────────────────────────────────────────────────────────────────

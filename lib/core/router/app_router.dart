@@ -12,6 +12,8 @@ import '../../features/shell/screens/main_shell.dart';
 import '../../features/home/screens/home_screen.dart';
 import '../../features/more/screens/more_screen.dart';
 import '../../features/calendar/screens/calendar_screen.dart';
+import '../../features/finance/screens/finance_screen.dart';
+import '../../features/inventory/screens/inventory_screen.dart';
 import '../../features/placeholder_screens.dart';
 
 // ── ROUTES ────────────────────────────────────────────────────────
