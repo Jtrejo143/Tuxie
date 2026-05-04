@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../../../core/supabase/supabase_config.dart';
 import '../../../core/theme/tuxie_theme.dart';
 import '../../../core/router/app_router.dart';
+import '../../../core/providers/shared_providers.dart';
 import '../widgets/add_category_sheet.dart';
 import '../widgets/add_expense_sheet.dart';
 import '../widgets/add_bill_sheet.dart';
@@ -172,7 +173,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen>
                           ),
                           // Quick add expense button
                           GestureDetector(
-                            onTap: () => _showAddExpense(context),
+                            onTap: () => _showAddChoice(context),
                             child: Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 16, vertical: 8),
@@ -186,7 +187,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen>
                                   const Icon(Icons.add,
                                     color: TuxieColors.sandDark, size: 18),
                                   const SizedBox(width: 4),
-                                  Text('Expense',
+                                  Text('Add',
                                     style: TuxieTextStyles.body(13,
                                       weight: FontWeight.w800,
                                       color: TuxieColors.sandDark)),
@@ -261,6 +262,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen>
             _ExpensesTab(
               expenses: expenses,
               onDelete: (id) => _deleteExpense(id),
+              onEdit: (e) => _showEditExpense(context, e),
             ),
 
             // ── BILLS TAB ──────────────────────────────────────
@@ -269,6 +271,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen>
               onAddBill: () => _showAddBill(context),
               onMarkPaid: (bill) => _markBillPaid(bill),
               onDelete: (id) => _deleteBill(id),
+              onEdit: (bill) => _showEditBill(context, bill),
             ),
           ],
         ),
@@ -303,6 +306,55 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen>
     );
   }
 
+  // Single add button — shows choice of expense or bill
+  void _showAddChoice(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        decoration: const BoxDecoration(
+          color: TuxieColors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Center(child: Container(
+              width: 40, height: 4,
+              decoration: BoxDecoration(
+                color: TuxieColors.border,
+                borderRadius: BorderRadius.circular(2)))),
+            const SizedBox(height: 20),
+            Text('What would you like to add?',
+              style: TuxieTextStyles.display(20)),
+            const SizedBox(height: 20),
+            _AddChoiceTile(
+              emoji: '🧾',
+              label: 'Log an expense',
+              sub: 'Record something you spent money on',
+              color: TuxieColors.sand,
+              onTap: () {
+                Navigator.of(context).pop();
+                _showAddExpense(context);
+              },
+            ),
+            const SizedBox(height: 10),
+            _AddChoiceTile(
+              emoji: '📄',
+              label: 'Add a bill',
+              sub: 'Track a recurring monthly bill',
+              color: TuxieColors.lavender,
+              onTap: () {
+                Navigator.of(context).pop();
+                _showAddBill(context);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showAddExpense(BuildContext context) {
     debugPrint('🐱 FinanceScreen: opening add expense sheet');
     showModalBottomSheet(
@@ -311,7 +363,24 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen>
       backgroundColor: Colors.transparent,
       builder: (_) => AddExpenseSheet(onSaved: () {
         ref.invalidate(monthExpensesProvider);
+        ref.invalidate(financeSummaryProvider);
       }),
+    );
+  }
+
+  void _showEditExpense(BuildContext context, Map<String, dynamic> expense) {
+    debugPrint('🐱 FinanceScreen: editing expense id=${expense['id']}');
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => AddExpenseSheet(
+        existingExpense: expense,
+        onSaved: () {
+          ref.invalidate(monthExpensesProvider);
+          ref.invalidate(financeSummaryProvider);
+        },
+      ),
     );
   }
 
@@ -323,7 +392,24 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen>
       backgroundColor: Colors.transparent,
       builder: (_) => AddBillSheet(onSaved: () {
         ref.invalidate(billsProvider);
+        ref.invalidate(financeSummaryProvider);
       }),
+    );
+  }
+
+  void _showEditBill(BuildContext context, Map<String, dynamic> bill) {
+    debugPrint('🐱 FinanceScreen: editing bill id=${bill['id']}');
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => AddBillSheet(
+        existingBill: bill,
+        onSaved: () {
+          ref.invalidate(billsProvider);
+          ref.invalidate(financeSummaryProvider);
+        },
+      ),
     );
   }
 
@@ -341,11 +427,36 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen>
   Future<void> _markBillPaid(Map<String, dynamic> bill) async {
     debugPrint('🐱 FinanceScreen: marking bill paid id=${bill['id']}');
     try {
+      final userId  = supabase.auth.currentUser!.id;
+      final today   = DateTime.now().toIso8601String().split('T')[0];
+      final catId   = bill['category_id'] as String?;
+
+      // Step 1 — Mark bill as paid
       await supabase.from('bills').update({
-        'last_paid_at': DateTime.now().toIso8601String().split('T')[0],
+        'last_paid_at': today,
       }).eq('id', bill['id']);
-      ref.invalidate(billsProvider);
       debugPrint('🐱 FinanceScreen: bill marked paid');
+
+      // Step 2 — If linked to a budget category, log as expense
+      if (catId != null) {
+        final member = await supabase
+          .from('household_members')
+          .select('household_id')
+          .eq('profile_id', userId)
+          .single();
+        await supabase.from('expenses').insert({
+          'household_id': member['household_id'],
+          'category_id':  catId,
+          'amount':        bill['amount'],
+          'description':   '${bill['name']} (bill payment)',
+          'date':          today,
+          'logged_by':     userId,
+        });
+        debugPrint('🐱 FinanceScreen: bill expense logged to category');
+      }
+
+      ref.invalidate(billsProvider);
+      ref.invalidate(monthExpensesProvider);
     } catch (e) {
       debugPrint('🐱 FinanceScreen: mark paid FAILED — $e');
     }
@@ -418,17 +529,15 @@ class _BudgetTab extends StatelessWidget {
               );
             }
 
-            // Calculate spend per category
+            // Build spend map — use loaded expense data directly
             final spendMap = <String, double>{};
-            expenses.whenData((expList) {
-              for (final e in expList) {
-                final catId = e['category_id'] as String?;
-                if (catId != null) {
-                  spendMap[catId] = (spendMap[catId] ?? 0) +
-                    (e['amount'] as num).toDouble();
-                }
+            for (final e in (expenses.value ?? [])) {
+              final catId = e['category_id'] as String?;
+              if (catId != null) {
+                spendMap[catId] = (spendMap[catId] ?? 0) +
+                  (e['amount'] as num).toDouble();
               }
-            });
+            }
 
             return Column(
               children: catList.map((cat) {
@@ -515,8 +624,13 @@ class _BudgetTab extends StatelessWidget {
 class _ExpensesTab extends StatelessWidget {
   final AsyncValue<List<Map<String, dynamic>>> expenses;
   final ValueChanged<String> onDelete;
+  final ValueChanged<Map<String, dynamic>> onEdit;
 
-  const _ExpensesTab({required this.expenses, required this.onDelete});
+  const _ExpensesTab({
+    required this.expenses,
+    required this.onDelete,
+    required this.onEdit,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -526,7 +640,7 @@ class _ExpensesTab extends StatelessWidget {
           return _EmptyFinance(
             emoji: '🧾',
             message: 'No expenses logged yet',
-            sub: 'Tap + Expense to log your first one',
+            sub: 'Tap + to log your first expense',
           );
         }
         return ListView.builder(
@@ -538,42 +652,43 @@ class _ExpensesTab extends StatelessWidget {
             final amount = (e['amount'] as num).toDouble();
             final date   = DateTime.parse(e['date']);
 
-            return Container(
-              margin: const EdgeInsets.only(bottom: 10),
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: TuxieColors.white,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: TuxieColors.border),
+            return GestureDetector(
+              onTap: () => onEdit(e),
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: TuxieColors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: TuxieColors.border),
+                ),
+                child: Row(children: [
+                  Text(cat?['emoji'] as String? ?? '💳',
+                    style: const TextStyle(fontSize: 28)),
+                  const SizedBox(width: 12),
+                  Expanded(child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(e['description'] as String? ??
+                        cat?['name'] as String? ?? 'Expense',
+                        style: TuxieTextStyles.body(14,
+                          weight: FontWeight.w600)),
+                      const SizedBox(height: 3),
+                      Text(
+                        '${cat?['name'] ?? 'Uncategorised'} · ${DateFormat('MMM d').format(date)}',
+                        style: TuxieTextStyles.body(12,
+                          color: TuxieColors.textSecondary)),
+                    ],
+                  )),
+                  Text('\$${amount.toStringAsFixed(2)}',
+                    style: TuxieTextStyles.body(16,
+                      weight: FontWeight.w800,
+                      color: TuxieColors.textPrimary)),
+                  const SizedBox(width: 8),
+                  const Icon(Icons.chevron_right_rounded,
+                    color: TuxieColors.textMuted, size: 18),
+                ]),
               ),
-              child: Row(children: [
-                Text(cat?['emoji'] as String? ?? '💳',
-                  style: const TextStyle(fontSize: 28)),
-                const SizedBox(width: 12),
-                Expanded(child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(e['description'] as String? ??
-                      cat?['name'] as String? ?? 'Expense',
-                      style: TuxieTextStyles.body(14,
-                        weight: FontWeight.w600)),
-                    const SizedBox(height: 3),
-                    Text(
-                      '${cat?['name'] ?? 'Uncategorised'} · ${DateFormat('MMM d').format(date)}',
-                      style: TuxieTextStyles.body(12,
-                        color: TuxieColors.textSecondary)),
-                  ],
-                )),
-                Text('\$${amount.toStringAsFixed(2)}',
-                  style: TuxieTextStyles.body(16,
-                    weight: FontWeight.w800,
-                    color: TuxieColors.textPrimary)),
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: () => onDelete(e['id'] as String),
-                  child: const Icon(Icons.close,
-                    color: TuxieColors.textMuted, size: 18)),
-              ]),
             );
           },
         );
@@ -584,19 +699,19 @@ class _ExpensesTab extends StatelessWidget {
   }
 }
 
-// ── BILLS TAB ────────────────────────────────────────────────────
-
 class _BillsTab extends StatelessWidget {
   final AsyncValue<List<Map<String, dynamic>>> bills;
   final VoidCallback onAddBill;
   final ValueChanged<Map<String, dynamic>> onMarkPaid;
   final ValueChanged<String> onDelete;
+  final ValueChanged<Map<String, dynamic>> onEdit;
 
   const _BillsTab({
     required this.bills,
     required this.onAddBill,
     required this.onMarkPaid,
     required this.onDelete,
+    required this.onEdit,
   });
 
   @override
@@ -658,7 +773,9 @@ class _BillsTab extends StatelessWidget {
                                    dueDate.month == now.month;
                 final isOverdue  = !paidThisMonth && dueDate.isBefore(now);
 
-                return Container(
+                return GestureDetector(
+                  onTap: () => onEdit(bill),
+                  child: Container(
                   margin: const EdgeInsets.only(bottom: 12),
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -751,7 +868,7 @@ class _BillsTab extends StatelessWidget {
                       ],
                     ),
                   ]),
-                );
+                ));
               }).toList(),
             );
           },
@@ -765,6 +882,48 @@ class _BillsTab extends StatelessWidget {
 }
 
 // ── SHARED WIDGETS ────────────────────────────────────────────────
+
+class _AddChoiceTile extends StatelessWidget {
+  final String emoji;
+  final String label;
+  final String sub;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _AddChoiceTile({
+    required this.emoji, required this.label, required this.sub,
+    required this.color, required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(20)),
+        child: Row(children: [
+          Text(emoji, style: const TextStyle(fontSize: 28)),
+          const SizedBox(width: 14),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: TuxieTextStyles.body(15,
+                weight: FontWeight.w700)),
+              const SizedBox(height: 3),
+              Text(sub, style: TuxieTextStyles.body(12,
+                color: TuxieColors.textSecondary)),
+            ],
+          )),
+          const Icon(Icons.chevron_right_rounded,
+            color: TuxieColors.textMuted, size: 20),
+        ]),
+      ),
+    );
+  }
+}
 
 class _SummaryCard extends StatelessWidget {
   final String label;

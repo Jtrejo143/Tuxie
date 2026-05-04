@@ -1,5 +1,4 @@
 // lib/features/inventory/widgets/restock_sheet.dart
-// Log a restock — updates quantity and records purchase history
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -16,36 +15,78 @@ class RestockSheet extends StatefulWidget {
 }
 
 class _RestockSheetState extends State<RestockSheet> {
-  int      _qty      = 1;
-  final    _priceCtrl = TextEditingController();
-  final    _notesCtrl = TextEditingController();
-  DateTime _date      = DateTime.now();
-  bool     _loading   = false;
+  int      _qty        = 1;
+  final    _priceCtrl  = TextEditingController();
+  final    _notesCtrl  = TextEditingController();
+  DateTime _date       = DateTime.now();
+  bool     _loading    = false;
+  bool     _logExpense = false;
+  String?  _categoryId;
   String?  _error;
+
+  // Loaded async — starts empty, populated in initState
+  List<Map<String, dynamic>> _categories = [];
+  bool _catsLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCategories();
+  }
+
+  Future<void> _loadCategories() async {
+    debugPrint('🐱 RestockSheet: loading categories');
+    try {
+      final userId = supabase.auth.currentUser!.id;
+      final member = await supabase
+          .from('household_members')
+          .select('household_id')
+          .eq('profile_id', userId)
+          .single();
+      final cats = await supabase
+          .from('budget_categories')
+          .select('*')
+          .eq('household_id', member['household_id'])
+          .order('name', ascending: true);
+      if (mounted) {
+        setState(() {
+          _categories  = List<Map<String, dynamic>>.from(cats);
+          _catsLoading = false;
+        });
+        debugPrint('🐱 RestockSheet: loaded ${_categories.length} categories');
+      }
+    } catch (e) {
+      debugPrint('🐱 RestockSheet: load categories FAILED — $e');
+      if (mounted) setState(() { _catsLoading = false; });
+    }
+  }
 
   Future<void> _save() async {
     if (_qty <= 0) {
       setState(() { _error = 'Quantity must be at least 1.'; });
       return;
     }
+    if (_logExpense && _categoryId == null) {
+      setState(() { _error = 'Please select a budget category for the expense.'; });
+      return;
+    }
     setState(() { _loading = true; _error = null; });
 
-    debugPrint('🐱 RestockSheet: restocking item=${widget.item['name']} qty=$_qty');
+    debugPrint('🐱 RestockSheet: Step 1 — updating qty');
     try {
       final userId     = supabase.auth.currentUser!.id;
       final currentQty = widget.item['current_qty'] as int? ?? 0;
       final newQty     = currentQty + _qty;
       final price      = double.tryParse(_priceCtrl.text);
 
-      // Step 1 — Update current quantity
-      debugPrint('🐱 RestockSheet: Step 1 — updating qty $currentQty → $newQty');
+      // Step 1 — Update quantity
       await supabase.from('inventory_items')
-        .update({'current_qty': newQty})
-        .eq('id', widget.item['id']);
-      debugPrint('🐱 RestockSheet: Step 1 SUCCESS');
+          .update({'current_qty': newQty})
+          .eq('id', widget.item['id']);
+      debugPrint('🐱 RestockSheet: Step 1 SUCCESS — $currentQty → $newQty');
 
       // Step 2 — Log purchase history
-      debugPrint('🐱 RestockSheet: Step 2 — logging purchase history');
+      debugPrint('🐱 RestockSheet: Step 2 — logging history');
       await supabase.from('purchase_history').insert({
         'item_id':       widget.item['id'],
         'qty_purchased': _qty,
@@ -53,9 +94,30 @@ class _RestockSheetState extends State<RestockSheet> {
         'purchased_by':  userId,
         'price':         price,
         'notes':         _notesCtrl.text.trim().isEmpty
-          ? null : _notesCtrl.text.trim(),
+            ? null : _notesCtrl.text.trim(),
       });
       debugPrint('🐱 RestockSheet: Step 2 SUCCESS');
+
+      // Step 3 — Optionally log as expense
+      // price can be null — we use 0 as fallback so the expense still logs
+      if (_logExpense && _categoryId != null) {
+        final expenseAmount = price ?? 0.0;
+        debugPrint('🐱 RestockSheet: Step 3 — logging expense amount=$expenseAmount category=$_categoryId');
+        final member = await supabase
+            .from('household_members')
+            .select('household_id')
+            .eq('profile_id', userId)
+            .single();
+        await supabase.from('expenses').insert({
+          'household_id': member['household_id'],
+          'category_id':  _categoryId,
+          'amount':        expenseAmount,
+          'description':   'Restock: ${widget.item['name']}',
+          'date':          DateFormat('yyyy-MM-dd').format(_date),
+          'logged_by':     userId,
+        });
+        debugPrint('🐱 RestockSheet: Step 3 SUCCESS');
+      }
 
       widget.onSaved();
       if (mounted) Navigator.of(context).pop();
@@ -91,22 +153,21 @@ class _RestockSheetState extends State<RestockSheet> {
                 borderRadius: BorderRadius.circular(2)))),
             const SizedBox(height: 20),
 
-            // Item header
+            // Header
             Row(children: [
               Text(widget.item['emoji'] as String? ?? '📦',
                 style: const TextStyle(fontSize: 32)),
               const SizedBox(width: 12),
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Restock',
-                  style: TuxieTextStyles.display(22)),
+                Text('Restock', style: TuxieTextStyles.display(22)),
                 Text(widget.item['name'] as String,
                   style: TuxieTextStyles.body(14,
                     color: TuxieColors.textSecondary)),
               ]),
             ]),
-            const SizedBox(height: 8),
+            const SizedBox(height: 16),
 
-            // Current qty info
+            // Current stock info
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -117,14 +178,13 @@ class _RestockSheetState extends State<RestockSheet> {
                   color: TuxieColors.textSecondary, size: 18),
                 const SizedBox(width: 8),
                 Text(
-                  'Current stock: $currentQty'
-                  '${unit.isNotEmpty ? ' $unit' : ''}',
+                  'Current: $currentQty${unit.isNotEmpty ? " $unit" : ""}',
                   style: TuxieTextStyles.body(13,
                     weight: FontWeight.w600,
                     color: TuxieColors.textSecondary)),
                 const Spacer(),
-                Text('→ ${currentQty + _qty}'
-                  '${unit.isNotEmpty ? ' $unit' : ''}',
+                Text(
+                  '→ ${currentQty + _qty}${unit.isNotEmpty ? " $unit" : ""}',
                   style: TuxieTextStyles.body(13,
                     weight: FontWeight.w800,
                     color: TuxieColors.sageDark)),
@@ -132,8 +192,8 @@ class _RestockSheetState extends State<RestockSheet> {
             ),
             const SizedBox(height: 20),
 
-            // Qty to add
-            _Label('Quantity added'),
+            // Quantity
+            _Label('Quantity to add'),
             const SizedBox(height: 8),
             Container(
               decoration: BoxDecoration(
@@ -142,13 +202,10 @@ class _RestockSheetState extends State<RestockSheet> {
               child: Row(children: [
                 IconButton(
                   icon: const Icon(Icons.remove),
-                  onPressed: _qty > 1
-                    ? () => setState(() => _qty--)
-                    : null,
+                  onPressed: _qty > 1 ? () => setState(() => _qty--) : null,
                   color: TuxieColors.textSecondary),
                 Expanded(child: Center(child: Text('$_qty',
-                  style: TuxieTextStyles.body(24,
-                    weight: FontWeight.w800)))),
+                  style: TuxieTextStyles.body(24, weight: FontWeight.w800)))),
                 IconButton(
                   icon: const Icon(Icons.add),
                   onPressed: () => setState(() => _qty++),
@@ -157,15 +214,15 @@ class _RestockSheetState extends State<RestockSheet> {
             ),
             const SizedBox(height: 16),
 
-            // Price paid (optional)
+            // Price
             _Label('Price paid (optional)'),
             const SizedBox(height: 6),
             TextField(
               controller: _priceCtrl,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               decoration: InputDecoration(
-                hintText: 'Total amount spent',
-                prefixText: '\$ ',
+                hintText: 'Amount spent (used for expense if logging)',
+                prefixText: r'$ ',
                 filled: true, fillColor: TuxieColors.linen,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(14),
@@ -217,6 +274,66 @@ class _RestockSheetState extends State<RestockSheet> {
                   borderSide: BorderSide.none)),
               style: TuxieTextStyles.body(14),
             ),
+            const SizedBox(height: 16),
+
+            // Log as expense toggle
+            Row(children: [
+              Expanded(child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Log as expense',
+                    style: TuxieTextStyles.body(14, weight: FontWeight.w700)),
+                  Text('Add to budget tracking',
+                    style: TuxieTextStyles.body(12,
+                      color: TuxieColors.textSecondary)),
+                ],
+              )),
+              Switch(
+                value: _logExpense,
+                onChanged: (v) => setState(() => _logExpense = v),
+                activeThumbColor: TuxieColors.tuxedo),
+            ]),
+
+            // Category picker — shown when toggle is on
+            if (_logExpense) ...[
+              const SizedBox(height: 12),
+              _catsLoading
+                ? const Center(child: Padding(
+                    padding: EdgeInsets.all(8),
+                    child: CircularProgressIndicator()))
+                : _categories.isEmpty
+                  ? Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: TuxieColors.sand,
+                        borderRadius: BorderRadius.circular(12)),
+                      child: Text(
+                        'No budget categories yet. Add one in Finances first.',
+                        style: TuxieTextStyles.body(13,
+                          color: TuxieColors.sandDark)))
+                  : DropdownButtonFormField<String?>(
+                      initialValue: _categoryId,
+                      hint: const Text('Select budget category'),
+                      decoration: InputDecoration(
+                        filled: true, fillColor: TuxieColors.linen,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide.none),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 14)),
+                      items: _categories.map((cat) => DropdownMenuItem<String?>(
+                        value: cat['id'] as String,
+                        child: Row(children: [
+                          Text(cat['emoji'] as String? ?? '💳',
+                            style: const TextStyle(fontSize: 16)),
+                          const SizedBox(width: 8),
+                          Text(cat['name'] as String,
+                            style: TuxieTextStyles.body(14)),
+                        ]),
+                      )).toList(),
+                      onChanged: (v) => setState(() => _categoryId = v),
+                    ),
+            ],
 
             if (_error != null) ...[
               const SizedBox(height: 12),
@@ -243,9 +360,10 @@ class _RestockSheetState extends State<RestockSheet> {
                   ? const SizedBox(height: 20, width: 20,
                       child: CircularProgressIndicator(
                         strokeWidth: 2, color: Colors.white))
-                  : Text('Log restock',
-                      style: TuxieTextStyles.body(16,
-                        weight: FontWeight.w800, color: Colors.white)),
+                  : const Text('Log restock',
+                      style: TextStyle(fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white)),
               ),
             ),
           ],

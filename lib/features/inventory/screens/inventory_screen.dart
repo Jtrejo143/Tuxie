@@ -7,8 +7,11 @@ import 'package:flutter_riverpod/legacy.dart';
 import '../../../core/supabase/supabase_config.dart';
 import '../../../core/theme/tuxie_theme.dart';
 import '../../../core/router/app_router.dart';
+import '../../../core/providers/shared_providers.dart';
+import '../../finance/screens/finance_screen.dart' show monthExpensesProvider;
 import '../widgets/add_item_sheet.dart';
 import '../widgets/restock_sheet.dart';
+import '../widgets/edit_history_sheet.dart';
 
 // ── PROVIDERS ────────────────────────────────────────────────────
 
@@ -320,7 +323,20 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                       ? '\$${(r['price'] as num).toStringAsFixed(2)}'
                       : null;
 
-                    return Container(
+                    return GestureDetector(
+                      onTap: () => showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        backgroundColor: Colors.transparent,
+                        builder: (_) => EditHistorySheet(
+                          record: r,
+                          onSaved: () {
+                            ref.invalidate(purchaseHistoryProvider);
+                            ref.invalidate(inventoryProvider);
+                          },
+                        ),
+                      ),
+                      child: Container(
                       margin: const EdgeInsets.only(bottom: 10),
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
@@ -352,8 +368,11 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                           Text(price,
                             style: TuxieTextStyles.body(15,
                               weight: FontWeight.w800)),
+                        const SizedBox(width: 8),
+                        const Icon(Icons.chevron_right_rounded,
+                          color: TuxieColors.textMuted, size: 16),
                       ]),
-                    );
+                    ));
                   },
                 );
               },
@@ -404,6 +423,9 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         onSaved: () {
           ref.invalidate(inventoryProvider);
           ref.invalidate(purchaseHistoryProvider);
+          ref.invalidate(lowStockCountProvider);
+          ref.invalidate(financeSummaryProvider);
+          ref.invalidate(monthExpensesProvider);
         },
       ),
     );
@@ -420,6 +442,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
           .update({'current_qty': newQty})
           .eq('id', item['id']);
       ref.invalidate(inventoryProvider);
+      ref.invalidate(lowStockCountProvider);
     } catch (e) {
       debugPrint('🐱 InventoryScreen: qty change FAILED — $e');
     }

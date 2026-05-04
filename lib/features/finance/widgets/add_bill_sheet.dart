@@ -1,4 +1,5 @@
 // lib/features/finance/widgets/add_bill_sheet.dart
+// Create AND edit bills — with optional budget category link
 
 import 'package:flutter/material.dart';
 import '../../../core/supabase/supabase_config.dart';
@@ -16,21 +17,48 @@ class AddBillSheet extends StatefulWidget {
 class _AddBillSheetState extends State<AddBillSheet> {
   final _nameCtrl   = TextEditingController();
   final _amountCtrl = TextEditingController();
-  int  _dueDay      = 1;
-  bool _isAutopay   = false;
-  bool _loading     = false;
+  int    _dueDay    = 1;
+  bool   _isAutopay = false;
+  String? _categoryId;
+  bool   _loading   = false;
   String? _error;
+  List<Map<String, dynamic>> _categories = [];
 
   bool get _isEditing => widget.existingBill != null;
 
   @override
   void initState() {
     super.initState();
+    _loadCategories();
     if (_isEditing) {
-      _nameCtrl.text   = widget.existingBill!['name'] ?? '';
-      _amountCtrl.text = widget.existingBill!['amount']?.toString() ?? '';
-      _dueDay          = widget.existingBill!['due_day'] as int? ?? 1;
-      _isAutopay       = widget.existingBill!['is_autopay'] as bool? ?? false;
+      final b = widget.existingBill!;
+      _nameCtrl.text   = b['name'] ?? '';
+      _amountCtrl.text = b['amount']?.toString() ?? '';
+      _dueDay          = b['due_day'] as int? ?? 1;
+      _isAutopay       = b['is_autopay'] as bool? ?? false;
+      _categoryId      = b['category_id'];
+    }
+  }
+
+  Future<void> _loadCategories() async {
+    debugPrint('🐱 AddBillSheet: loading categories');
+    try {
+      final userId = supabase.auth.currentUser!.id;
+      final member = await supabase
+        .from('household_members')
+        .select('household_id')
+        .eq('profile_id', userId)
+        .single();
+      final cats = await supabase
+        .from('budget_categories')
+        .select('*')
+        .eq('household_id', member['household_id'])
+        .order('name', ascending: true);
+      setState(() {
+        _categories = List<Map<String, dynamic>>.from(cats);
+      });
+    } catch (e) {
+      debugPrint('🐱 AddBillSheet: load FAILED — $e');
     }
   }
 
@@ -45,21 +73,16 @@ class _AddBillSheetState extends State<AddBillSheet> {
       return;
     }
     setState(() { _loading = true; _error = null; });
-    debugPrint('🐱 AddBillSheet: saving bill name=${_nameCtrl.text}');
+    debugPrint('🐱 AddBillSheet: saving name=${_nameCtrl.text}');
 
     try {
       final userId = supabase.auth.currentUser!.id;
-      final member = await supabase
-        .from('household_members')
-        .select('household_id')
-        .eq('profile_id', userId)
-        .single();
-
       final payload = {
-        'name':       _nameCtrl.text.trim(),
-        'amount':     amount,
-        'due_day':    _dueDay,
-        'is_autopay': _isAutopay,
+        'name':        _nameCtrl.text.trim(),
+        'amount':      amount,
+        'due_day':     _dueDay,
+        'is_autopay':  _isAutopay,
+        'category_id': _categoryId,
       };
 
       if (_isEditing) {
@@ -68,6 +91,11 @@ class _AddBillSheetState extends State<AddBillSheet> {
           .eq('id', widget.existingBill!['id']);
         debugPrint('🐱 AddBillSheet: update SUCCESS');
       } else {
+        final member = await supabase
+          .from('household_members')
+          .select('household_id')
+          .eq('profile_id', userId)
+          .single();
         await supabase.from('bills').insert({
           ...payload,
           'household_id': member['household_id'],
@@ -131,8 +159,7 @@ class _AddBillSheetState extends State<AddBillSheet> {
               controller: _amountCtrl,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               decoration: InputDecoration(
-                hintText: '0.00',
-                prefixText: '\$ ',
+                hintText: '0.00', prefixText: r'$ ',
                 filled: true, fillColor: TuxieColors.linen,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(14),
@@ -141,19 +168,52 @@ class _AddBillSheetState extends State<AddBillSheet> {
             ),
             const SizedBox(height: 16),
 
+            // Budget category link
+            _Label('Budget category (optional)'),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String?>(
+              initialValue: _categoryId,
+              decoration: InputDecoration(
+                filled: true, fillColor: TuxieColors.linen,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 14)),
+              items: [
+                const DropdownMenuItem<String?>(
+                  value: null,
+                  child: Text('No category'),
+                ),
+                ..._categories.map((cat) => DropdownMenuItem<String?>(
+                  value: cat['id'] as String,
+                  child: Row(children: [
+                    Text(cat['emoji'] as String? ?? '💳',
+                      style: const TextStyle(fontSize: 18)),
+                    const SizedBox(width: 10),
+                    Text(cat['name'] as String),
+                  ]),
+                )),
+              ],
+              onChanged: (v) => setState(() => _categoryId = v),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'When marking this bill as paid, the amount will count toward the selected category budget.',
+              style: TuxieTextStyles.body(11,
+                color: TuxieColors.textMuted)),
+            const SizedBox(height: 16),
+
             _Label('Due day of month'),
             const SizedBox(height: 8),
             Row(children: [
-              Expanded(
-                child: Slider(
-                  value: _dueDay.toDouble(),
-                  min: 1, max: 31,
-                  divisions: 30,
-                  activeColor: TuxieColors.tuxedo,
-                  label: 'Day $_dueDay',
-                  onChanged: (v) => setState(() => _dueDay = v.round()),
-                ),
-              ),
+              Expanded(child: Slider(
+                value: _dueDay.toDouble(),
+                min: 1, max: 31, divisions: 30,
+                activeColor: TuxieColors.tuxedo,
+                label: 'Day $_dueDay',
+                onChanged: (v) => setState(() => _dueDay = v.round()),
+              )),
               Container(
                 width: 52,
                 padding: const EdgeInsets.symmetric(
@@ -163,12 +223,10 @@ class _AddBillSheetState extends State<AddBillSheet> {
                   borderRadius: BorderRadius.circular(12)),
                 child: Center(child: Text('$_dueDay',
                   style: TuxieTextStyles.body(16,
-                    weight: FontWeight.w800))),
-              ),
+                    weight: FontWeight.w800)))),
             ]),
             const SizedBox(height: 8),
 
-            // Autopay toggle
             Row(children: [
               Expanded(child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -176,7 +234,7 @@ class _AddBillSheetState extends State<AddBillSheet> {
                   Text('Autopay',
                     style: TuxieTextStyles.body(14,
                       weight: FontWeight.w700)),
-                  Text('Mark as automatically paid each month',
+                  Text('Automatically marked paid each month',
                     style: TuxieTextStyles.body(12,
                       color: TuxieColors.textSecondary)),
                 ],
@@ -184,8 +242,7 @@ class _AddBillSheetState extends State<AddBillSheet> {
               Switch(
                 value: _isAutopay,
                 onChanged: (v) => setState(() => _isAutopay = v),
-                activeThumbColor: TuxieColors.tuxedo,
-              ),
+                activeThumbColor: TuxieColors.tuxedo),
             ]),
 
             if (_error != null) ...[

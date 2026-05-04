@@ -3,10 +3,12 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../core/supabase/supabase_config.dart';
 import '../../../core/theme/tuxie_theme.dart';
 import '../../../core/router/app_router.dart';
+import '../../../core/providers/shared_providers.dart';
 import '../../tasks/widgets/task_card.dart';
 import '../../tasks/widgets/add_task_sheet.dart';
 
@@ -112,6 +114,7 @@ final habitSummaryProvider = FutureProvider<Map<String, int>>((ref) async {
   return {'total': habits.length, 'done': logs.length};
 });
 
+// Finance summary — total spent vs budget this month
 // ── SCREEN ───────────────────────────────────────────────────────
 
 class HomeScreen extends ConsumerWidget {
@@ -120,9 +123,11 @@ class HomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profile   = ref.watch(profileProvider);
-    final household = ref.watch(householdProvider);
+    ref.watch(householdProvider); // keep watch for cache invalidation
     final tasks     = ref.watch(todayTasksProvider);
     final habits    = ref.watch(habitSummaryProvider);
+    final finance   = ref.watch(financeSummaryProvider);
+    final lowStock  = ref.watch(lowStockCountProvider);
 
     final now      = DateTime.now();
     final hour     = now.hour;
@@ -137,6 +142,8 @@ class HomeScreen extends ConsumerWidget {
           ref.invalidate(householdProvider);
           ref.invalidate(todayTasksProvider);
           ref.invalidate(habitSummaryProvider);
+          ref.invalidate(financeSummaryProvider);
+          ref.invalidate(lowStockCountProvider);
         },
         color: TuxieColors.lavenderDark,
         child: CustomScrollView(
@@ -314,57 +321,103 @@ class HomeScreen extends ConsumerWidget {
                   _SectionHeader(title: "At a glance"),
                   const SizedBox(height: 10),
 
-                  Row(
-                    children: [
-                      Expanded(
-                        child: tasks.when(
-                          data: (t) => _StatCard(
-                            value: '${t.length}',
-                            label: 'Tasks due',
-                            sub: t.isEmpty ? 'all clear!' : 'today',
-                            color: t.isEmpty ? TuxieColors.sage : TuxieColors.blush,
-                            tc: t.isEmpty ? TuxieColors.sageDark : TuxieColors.blushDark,
-                          ),
-                          loading: () => const _StatCard(value: '...', label: 'Tasks', sub: '',
-                            color: TuxieColors.blush, tc: TuxieColors.blushDark),
-                          error: (_, __) => const _StatCard(value: '?', label: 'Tasks', sub: '',
-                            color: TuxieColors.blush, tc: TuxieColors.blushDark),
+                  // Row 1 — Tasks + Habits
+                  Row(children: [
+                    Expanded(
+                      child: tasks.when(
+                        data: (t) => _StatCard(
+                          value: '${t.length}',
+                          label: 'Tasks due',
+                          sub: t.isEmpty ? 'all clear!' : 'today',
+                          color: t.isEmpty ? TuxieColors.sage : TuxieColors.blush,
+                          tc: t.isEmpty ? TuxieColors.sageDark : TuxieColors.blushDark,
                         ),
+                        loading: () => const _StatCard(value: '...', label: 'Tasks', sub: '',
+                          color: TuxieColors.blush, tc: TuxieColors.blushDark),
+                        error: (_, __) => const _StatCard(value: '?', label: 'Tasks', sub: '',
+                          color: TuxieColors.blush, tc: TuxieColors.blushDark),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: habits.when(
-                          data: (h) => _StatCard(
-                            value: '${h["done"]}/${h["total"]}',
-                            label: 'Habits',
-                            sub: 'done today',
-                            color: TuxieColors.sage,
-                            tc: TuxieColors.sageDark,
-                          ),
-                          loading: () => const _StatCard(value: '...', label: 'Habits', sub: '',
-                            color: TuxieColors.sage, tc: TuxieColors.sageDark),
-                          error: (_, __) => const _StatCard(value: '?', label: 'Habits', sub: '',
-                            color: TuxieColors.sage, tc: TuxieColors.sageDark),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: habits.when(
+                        data: (h) => _StatCard(
+                          value: '${h["done"]}/${h["total"]}',
+                          label: 'Habits',
+                          sub: 'done today',
+                          color: TuxieColors.sage,
+                          tc: TuxieColors.sageDark,
                         ),
+                        loading: () => const _StatCard(value: '...', label: 'Habits', sub: '',
+                          color: TuxieColors.sage, tc: TuxieColors.sageDark),
+                        error: (_, __) => const _StatCard(value: '?', label: 'Habits', sub: '',
+                          color: TuxieColors.sage, tc: TuxieColors.sageDark),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: household.when(
-                          data: (h) => _StatCard(
-                            value: '🏠',
-                            label: 'Household',
-                            sub: h?['name']?.toString().split(' ').first ?? 'Home',
-                            color: TuxieColors.lavender,
-                            tc: TuxieColors.lavenderDark,
+                    ),
+                  ]),
+                  const SizedBox(height: 10),
+                  // Row 2 — Budget + Inventory
+                  Row(children: [
+                    Expanded(
+                      child: finance.when(
+                        data: (f) {
+                          final spent  = f['spent'] ?? 0.0;
+                          final budget = f['budget'] ?? 0.0;
+                          final bills  = (f['billsDue'] ?? 0.0).toInt();
+                          final pct    = budget > 0
+                            ? ((spent / budget) * 100).round() : 0;
+                          final isOver = spent > budget && budget > 0;
+                          return GestureDetector(
+                            onTap: () => context.go(Routes.finance),
+                            child: _StatCard(
+                              value: budget > 0 ? '$pct%' : '\$${spent.toStringAsFixed(0)}',
+                              label: bills > 0
+                                ? '$bills bill${bills == 1 ? "" : "s"} due'
+                                : 'Budget',
+                              sub: budget > 0
+                                ? isOver ? 'over budget!' : 'used this month'
+                                : 'spent this month',
+                              color: isOver
+                                ? TuxieColors.blush
+                                : bills > 0
+                                  ? TuxieColors.sand
+                                  : TuxieColors.lavender,
+                              tc: isOver
+                                ? TuxieColors.blushDark
+                                : bills > 0
+                                  ? TuxieColors.sandDark
+                                  : TuxieColors.lavenderDark,
+                            ),
+                          );
+                        },
+                        loading: () => const _StatCard(value: '...', label: 'Budget', sub: '',
+                          color: TuxieColors.lavender, tc: TuxieColors.lavenderDark),
+                        error: (_, __) => const _StatCard(value: '💳', label: 'Budget', sub: '',
+                          color: TuxieColors.lavender, tc: TuxieColors.lavenderDark),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: lowStock.when(
+                        data: (count) => GestureDetector(
+                          onTap: () => context.go(Routes.inventory),
+                          child: _StatCard(
+                            value: count > 0 ? '$count' : '✅',
+                            label: 'Inventory',
+                            sub: count > 0
+                              ? 'item${count == 1 ? "" : "s"} low/out'
+                              : 'all stocked',
+                            color: count > 0 ? TuxieColors.sand : TuxieColors.sage,
+                            tc: count > 0 ? TuxieColors.sandDark : TuxieColors.sageDark,
                           ),
-                          loading: () => const _StatCard(value: '🏠', label: 'Home', sub: '...',
-                            color: TuxieColors.lavender, tc: TuxieColors.lavenderDark),
-                          error: (_, __) => const _StatCard(value: '🏠', label: 'Home', sub: '',
-                            color: TuxieColors.lavender, tc: TuxieColors.lavenderDark),
                         ),
+                        loading: () => const _StatCard(value: '...', label: 'Inventory', sub: '',
+                          color: TuxieColors.sand, tc: TuxieColors.sandDark),
+                        error: (_, __) => const _StatCard(value: '📦', label: 'Inventory', sub: '',
+                          color: TuxieColors.sand, tc: TuxieColors.sandDark),
                       ),
-                    ],
-                  ),
+                    ),
+                  ]),
 
                 ]),
               ),

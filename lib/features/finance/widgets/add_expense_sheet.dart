@@ -1,4 +1,5 @@
 // lib/features/finance/widgets/add_expense_sheet.dart
+// Create AND edit expenses
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -6,8 +7,9 @@ import '../../../core/supabase/supabase_config.dart';
 import '../../../core/theme/tuxie_theme.dart';
 
 class AddExpenseSheet extends StatefulWidget {
+  final Map<String, dynamic>? existingExpense;
   final VoidCallback onSaved;
-  const AddExpenseSheet({super.key, required this.onSaved});
+  const AddExpenseSheet({super.key, this.existingExpense, required this.onSaved});
 
   @override
   State<AddExpenseSheet> createState() => _AddExpenseSheetState();
@@ -22,10 +24,19 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
   String? _error;
   List<Map<String, dynamic>> _categories = [];
 
+  bool get _isEditing => widget.existingExpense != null;
+
   @override
   void initState() {
     super.initState();
     _loadCategories();
+    if (_isEditing) {
+      final e = widget.existingExpense!;
+      _amountCtrl.text = e['amount']?.toString() ?? '';
+      _descCtrl.text   = e['description'] ?? '';
+      _categoryId      = e['category_id'];
+      if (e['date'] != null) _date = DateTime.parse(e['date']);
+    }
   }
 
   Future<void> _loadCategories() async {
@@ -44,11 +55,12 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
         .order('name', ascending: true);
       setState(() {
         _categories = List<Map<String, dynamic>>.from(cats);
-        if (_categories.isNotEmpty) _categoryId = _categories.first['id'];
+        if (!_isEditing && _categories.isNotEmpty) {
+          _categoryId = _categories.first['id'];
+        }
       });
-      debugPrint('🐱 AddExpenseSheet: loaded ${_categories.length} categories');
     } catch (e) {
-      debugPrint('🐱 AddExpenseSheet: load categories FAILED — $e');
+      debugPrint('🐱 AddExpenseSheet: load FAILED — $e');
     }
   }
 
@@ -59,26 +71,37 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
       return;
     }
     setState(() { _loading = true; _error = null; });
-    debugPrint('🐱 AddExpenseSheet: saving expense amount=$amount');
+    debugPrint('🐱 AddExpenseSheet: saving amount=$amount editing=$_isEditing');
 
     try {
       final userId = supabase.auth.currentUser!.id;
-      final member = await supabase
-        .from('household_members')
-        .select('household_id')
-        .eq('profile_id', userId)
-        .single();
-
-      await supabase.from('expenses').insert({
-        'household_id': member['household_id'],
-        'category_id':  _categoryId,
-        'amount':        amount,
-        'description':   _descCtrl.text.trim().isEmpty
+      final payload = {
+        'category_id': _categoryId,
+        'amount':      amount,
+        'description': _descCtrl.text.trim().isEmpty
           ? null : _descCtrl.text.trim(),
-        'date':          DateFormat('yyyy-MM-dd').format(_date),
-        'logged_by':     userId,
-      });
-      debugPrint('🐱 AddExpenseSheet: insert SUCCESS');
+        'date': DateFormat('yyyy-MM-dd').format(_date),
+      };
+
+      if (_isEditing) {
+        await supabase.from('expenses')
+          .update(payload)
+          .eq('id', widget.existingExpense!['id']);
+        debugPrint('🐱 AddExpenseSheet: update SUCCESS');
+      } else {
+        final member = await supabase
+          .from('household_members')
+          .select('household_id')
+          .eq('profile_id', userId)
+          .single();
+        await supabase.from('expenses').insert({
+          ...payload,
+          'household_id': member['household_id'],
+          'logged_by':    userId,
+        });
+        debugPrint('🐱 AddExpenseSheet: insert SUCCESS');
+      }
+
       widget.onSaved();
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
@@ -86,6 +109,20 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
       setState(() { _error = e.toString(); });
     } finally {
       if (mounted) setState(() { _loading = false; });
+    }
+  }
+
+  Future<void> _delete() async {
+    if (!_isEditing) return;
+    debugPrint('🐱 AddExpenseSheet: deleting expense');
+    try {
+      await supabase.from('expenses')
+        .delete()
+        .eq('id', widget.existingExpense!['id']);
+      widget.onSaved();
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      setState(() { _error = e.toString(); });
     }
   }
 
@@ -109,19 +146,18 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
                 color: TuxieColors.border,
                 borderRadius: BorderRadius.circular(2)))),
             const SizedBox(height: 20),
-            Text('Log Expense', style: TuxieTextStyles.display(22)),
+            Text(_isEditing ? 'Edit Expense' : 'Log Expense',
+              style: TuxieTextStyles.display(22)),
             const SizedBox(height: 20),
 
-            // Amount
             _Label('Amount'),
             const SizedBox(height: 6),
             TextField(
               controller: _amountCtrl,
-              autofocus: true,
+              autofocus: !_isEditing,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               decoration: InputDecoration(
-                hintText: '0.00',
-                prefixText: '\$ ',
+                hintText: '0.00', prefixText: r'$ ',
                 filled: true, fillColor: TuxieColors.linen,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(14),
@@ -130,49 +166,34 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
             ),
             const SizedBox(height: 16),
 
-            // Category
             if (_categories.isNotEmpty) ...[
               _Label('Category'),
               const SizedBox(height: 8),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: _categories.map((cat) {
-                    final isSelected = _categoryId == cat['id'];
-                    return GestureDetector(
-                      onTap: () => setState(() => _categoryId = cat['id']),
-                      child: Container(
-                        margin: const EdgeInsets.only(right: 8),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                            ? TuxieColors.tuxedo
-                            : TuxieColors.linen,
-                          borderRadius: BorderRadius.circular(20)),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(cat['emoji'] as String? ?? '💳',
-                              style: const TextStyle(fontSize: 16)),
-                            const SizedBox(width: 6),
-                            Text(cat['name'] as String,
-                              style: TuxieTextStyles.body(13,
-                                weight: FontWeight.w700,
-                                color: isSelected
-                                  ? Colors.white
-                                  : TuxieColors.textPrimary)),
-                          ],
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
+              DropdownButtonFormField<String>(
+                initialValue: _categoryId,
+                decoration: InputDecoration(
+                  filled: true, fillColor: TuxieColors.linen,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide.none),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 14)),
+                items: _categories.map((cat) => DropdownMenuItem(
+                  value: cat['id'] as String,
+                  child: Row(children: [
+                    Text(cat['emoji'] as String? ?? '💳',
+                      style: const TextStyle(fontSize: 18)),
+                    const SizedBox(width: 10),
+                    Text(cat['name'] as String,
+                      style: TuxieTextStyles.body(14,
+                        weight: FontWeight.w600)),
+                  ]),
+                )).toList(),
+                onChanged: (v) => setState(() => _categoryId = v),
               ),
               const SizedBox(height: 16),
             ],
 
-            // Description
             _Label('Description (optional)'),
             const SizedBox(height: 6),
             TextField(
@@ -187,7 +208,6 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
             ),
             const SizedBox(height: 16),
 
-            // Date
             _Label('Date'),
             const SizedBox(height: 8),
             GestureDetector(
@@ -229,23 +249,37 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
             ],
             const SizedBox(height: 20),
 
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _loading ? null : _save,
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16))),
-                child: _loading
-                  ? const SizedBox(height: 20, width: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white))
-                  : Text('Log expense',
-                      style: TuxieTextStyles.body(16,
-                        weight: FontWeight.w800, color: Colors.white)),
+            Row(children: [
+              if (_isEditing) ...[
+                GestureDetector(
+                  onTap: _delete,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: TuxieColors.blush,
+                      borderRadius: BorderRadius.circular(16)),
+                    child: const Icon(Icons.delete_outline,
+                      color: TuxieColors.blushDark, size: 20))),
+                const SizedBox(width: 10),
+              ],
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: _loading ? null : _save,
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16))),
+                  child: _loading
+                    ? const SizedBox(height: 20, width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                    : Text(_isEditing ? 'Save changes' : 'Log expense',
+                        style: TuxieTextStyles.body(16,
+                          weight: FontWeight.w800, color: Colors.white)),
+                ),
               ),
-            ),
+            ]),
           ],
         ),
       ),

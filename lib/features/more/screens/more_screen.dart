@@ -8,7 +8,6 @@ import '../../../core/supabase/supabase_config.dart';
 import '../../../core/theme/tuxie_theme.dart';
 import '../../../core/router/app_router.dart';
 import '../../tasks/screens/tasks_screen.dart';
-import '../../inventory/screens/inventory_screen.dart';
 
 // ── PROVIDERS ────────────────────────────────────────────────────
 
@@ -206,9 +205,7 @@ class MoreScreen extends ConsumerWidget {
                   label: 'Inventory',
                   sub: 'Household essentials tracker',
                   color: TuxieColors.sand,
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const InventoryScreen())),
+                  onTap: () => context.go(Routes.inventory),
                 ),
                 _MenuItem(
                   emoji: '🤖',

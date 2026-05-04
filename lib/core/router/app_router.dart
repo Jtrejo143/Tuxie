@@ -28,7 +28,7 @@ class Routes {
   static const more       = '/more';
   static const goals      = '/more/goals';
   static const health     = '/more/health';
-  static const inventory  = '/more/inventory';
+  static const inventory  = '/inventory';
   static const chat       = '/more/chat';
 }
 
@@ -172,13 +172,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(path: Routes.calendar, builder: (c, s) => const CalendarScreen()),
           GoRoute(path: Routes.capture,  builder: (c, s) => const CaptureScreen()),
           GoRoute(path: Routes.finance,  builder: (c, s) => const FinanceScreen()),
+          GoRoute(path: Routes.inventory, builder: (c, s) => const InventoryScreen()),
           GoRoute(
             path: Routes.more,
             builder: (c, s) => const MoreScreen(),
             routes: [
               GoRoute(path: 'goals',     builder: (c, s) => const GoalsScreen()),
               GoRoute(path: 'health',    builder: (c, s) => const HealthScreen()),
-              GoRoute(path: 'inventory', builder: (c, s) => const InventoryScreen()),
+              // inventory moved to top-level shell route
               GoRoute(path: 'chat',      builder: (c, s) => const ChatScreen()),
             ],
           ),

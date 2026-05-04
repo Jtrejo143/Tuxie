@@ -1,8 +1,28 @@
 // lib/features/inventory/widgets/add_item_sheet.dart
+// Category dropdown + smart emoji assignment by category
 
 import 'package:flutter/material.dart';
 import '../../../core/supabase/supabase_config.dart';
 import '../../../core/theme/tuxie_theme.dart';
+
+// Icons mapped to each category
+const _categoryEmojis = {
+  'Cleaning':  ['🧴','🧻','🧼','🧹','🧺','🪣','🫧','🪥'],
+  'Pantry':    ['🍝','🥫','🧃','☕','🍞','🧀','🥚','🌶️'],
+  'Health':    ['💊','🩺','🩹','🌡️','💉','🧴','👓','🫀'],
+  'Pets':      ['🐾','🐕','🐈','🐟','🐦','🦴','🐾','🌿'],
+  'Bathroom':  ['🧴','🪥','🧻','🪒','🛁','🚿','🧼','💊'],
+  'Kitchen':   ['🍳','🥄','🔪','🥢','🫙','🧂','🫕','🥡'],
+  'Laundry':   ['🧺','👕','🫧','🧼','📦','🧲','✂️','🪡'],
+  'General':   ['📦','🧴','🧻','🧼','🌿','💊','☕','🍝',
+                 '🐾','🔧','💡','🧹','🧺','🛒','🥩','🍞',
+                 '🧀','🥚','🔑','💡','🪟','🛋️','🪴','🎁'],
+};
+
+const _categories = [
+  'Cleaning','Pantry','Health','Pets',
+  'Bathroom','Kitchen','Laundry','General',
+];
 
 class AddItemSheet extends StatefulWidget {
   final Map<String, dynamic>? existingItem;
@@ -26,15 +46,9 @@ class _AddItemSheetState extends State<AddItemSheet> {
 
   bool get _isEditing => widget.existingItem != null;
 
-  final _emojis = [
-    '📦','🧴','🧻','🧼','🌿','💊','☕','🍝','🥫','🧃',
-    '🐾','🔧','💡','🧹','🧺','🛒','🥩','🍞','🧀','🥚',
-  ];
-
-  final _categories = [
-    'Cleaning','Pantry','Health','Pets',
-    'Bathroom','Kitchen','Laundry','General',
-  ];
+  // Available emojis based on selected category
+  List<String> get _availableEmojis =>
+    _categoryEmojis[_category] ?? _categoryEmojis['General']!;
 
   @override
   void initState() {
@@ -49,6 +63,17 @@ class _AddItemSheetState extends State<AddItemSheet> {
       _currentQty = item['current_qty'] as int? ?? 0;
       _minQty     = item['min_qty'] as int? ?? 1;
     }
+  }
+
+  void _onCategoryChanged(String newCat) {
+    final emojis = _categoryEmojis[newCat] ?? _categoryEmojis['General']!;
+    setState(() {
+      _category = newCat;
+      // Auto-assign first emoji of new category if current doesn't belong
+      if (!emojis.contains(_emoji)) {
+        _emoji = emojis.first;
+      }
+    });
   }
 
   Future<void> _save() async {
@@ -73,10 +98,8 @@ class _AddItemSheetState extends State<AddItemSheet> {
         'category':    _category,
         'current_qty': _currentQty,
         'min_qty':     _minQty,
-        'unit':        _unitCtrl.text.trim().isEmpty
-          ? null : _unitCtrl.text.trim(),
-        'notes':       _notesCtrl.text.trim().isEmpty
-          ? null : _notesCtrl.text.trim(),
+        'unit':        _unitCtrl.text.trim().isEmpty ? null : _unitCtrl.text.trim(),
+        'notes':       _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
       };
 
       if (_isEditing) {
@@ -112,7 +135,6 @@ class _AddItemSheetState extends State<AddItemSheet> {
       widget.onSaved();
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
-      debugPrint('🐱 AddItemSheet: delete FAILED — $e');
       setState(() { _error = e.toString(); });
     }
   }
@@ -141,12 +163,35 @@ class _AddItemSheetState extends State<AddItemSheet> {
               style: TuxieTextStyles.display(22)),
             const SizedBox(height: 20),
 
-            // Emoji picker
+            // Category dropdown — first so emoji updates react
+            _Label('Category'),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
+              initialValue: _category,
+              decoration: InputDecoration(
+                filled: true, fillColor: TuxieColors.linen,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 14)),
+              items: _categories.map((cat) => DropdownMenuItem(
+                value: cat,
+                child: Text(cat,
+                  style: TuxieTextStyles.body(14, weight: FontWeight.w600)),
+              )).toList(),
+              onChanged: (v) {
+                if (v != null) _onCategoryChanged(v);
+              },
+            ),
+            const SizedBox(height: 16),
+
+            // Smart emoji picker — filtered by category
             _Label('Icon'),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8, runSpacing: 8,
-              children: _emojis.map((e) => GestureDetector(
+              children: _availableEmojis.map((e) => GestureDetector(
                 onTap: () => setState(() => _emoji = e),
                 child: Container(
                   width: 44, height: 44,
@@ -160,7 +205,7 @@ class _AddItemSheetState extends State<AddItemSheet> {
             ),
             const SizedBox(height: 16),
 
-            // Name
+            // Item name
             _Label('Item name'),
             const SizedBox(height: 6),
             TextField(
@@ -176,36 +221,6 @@ class _AddItemSheetState extends State<AddItemSheet> {
             ),
             const SizedBox(height: 16),
 
-            // Category
-            _Label('Category'),
-            const SizedBox(height: 8),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: _categories.map((cat) {
-                  final isSelected = _category == cat;
-                  return GestureDetector(
-                    onTap: () => setState(() => _category = cat),
-                    child: Container(
-                      margin: const EdgeInsets.only(right: 8),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                          ? TuxieColors.tuxedo : TuxieColors.linen,
-                        borderRadius: BorderRadius.circular(20)),
-                      child: Text(cat,
-                        style: TuxieTextStyles.body(12,
-                          weight: FontWeight.w700,
-                          color: isSelected
-                            ? Colors.white : TuxieColors.textMuted)),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
-            const SizedBox(height: 16),
-
             // Quantities
             Row(children: [
               Expanded(child: Column(
@@ -215,21 +230,19 @@ class _AddItemSheetState extends State<AddItemSheet> {
                   const SizedBox(height: 8),
                   _QtyField(
                     value: _currentQty,
-                    onChanged: (v) => setState(() => _currentQty = v),
-                  ),
+                    onChanged: (v) => setState(() => _currentQty = v)),
                 ],
               )),
               const SizedBox(width: 16),
               Expanded(child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _Label('Min qty (alert below)'),
+                  _Label('Min qty (alert)'),
                   const SizedBox(height: 8),
                   _QtyField(
                     value: _minQty,
                     onChanged: (v) => setState(() => _minQty = v),
-                    min: 0,
-                  ),
+                    min: 0),
                 ],
               )),
             ]),
