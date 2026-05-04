@@ -178,6 +178,13 @@ class MoreScreen extends ConsumerWidget {
                 const SizedBox(height: 10),
 
                 _MenuItem(
+                  emoji: '🧠',
+                  label: 'Second Brain',
+                  sub: 'Capture notes, links and ideas',
+                  color: TuxieColors.lavender,
+                  onTap: () => context.go(Routes.capture),
+                ),
+                _MenuItem(
                   emoji: '✅',
                   label: 'Tasks',
                   sub: 'All household tasks and to-dos',
@@ -253,7 +260,7 @@ class MoreScreen extends ConsumerWidget {
 
                 // Version tag
                 Center(
-                  child: Text('Tuxie · Milestone 2',
+                  child: Text('Tuxie · Milestone 4',
                     style: TuxieTextStyles.body(12,
                       color: TuxieColors.textMuted)),
                 ),

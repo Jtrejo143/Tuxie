@@ -7,16 +7,6 @@ import 'package:flutter/material.dart';
 import '../core/theme/tuxie_theme.dart';
 
 // ─────────────────────────────────────────────────────────────────
-// lib/features/brain/screens/capture_screen.dart
-// ─────────────────────────────────────────────────────────────────
-class CaptureScreen extends StatelessWidget {
-  const CaptureScreen({super.key});
-  @override
-  Widget build(BuildContext context) =>
-      _Placeholder(title: 'Second Brain', emoji: '🧠', color: TuxieColors.sage);
-}
-
-// ─────────────────────────────────────────────────────────────────
 // lib/features/goals/screens/goals_screen.dart
 // ─────────────────────────────────────────────────────────────────
 class GoalsScreen extends StatelessWidget {

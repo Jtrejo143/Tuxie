@@ -14,6 +14,7 @@ import '../../features/more/screens/more_screen.dart';
 import '../../features/calendar/screens/calendar_screen.dart';
 import '../../features/finance/screens/finance_screen.dart';
 import '../../features/inventory/screens/inventory_screen.dart';
+import '../../features/brain/screens/capture_screen.dart';
 import '../../features/placeholder_screens.dart';
 
 // ── ROUTES ────────────────────────────────────────────────────────
@@ -157,7 +158,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           }
           return null;
       }
-// exhaustive fallback
     },
 
     routes: [
